@@ -130,14 +130,4 @@ struct ProjectInfoTests {
         #expect(info.root == box.path("plain"))
         #expect(info.branch == nil)
     }
-
-    /// Each project keeps its colour across launches, which `hashValue` would not give.
-    @Test func colourIsStableAndInRange() {
-        #expect(ProjectInfo.colorIndex(root: "/w/agent-bell", count: 6) == 1)
-        #expect(ProjectInfo.colorIndex(root: "/w/robot", count: 6) == 0)
-        let picks = ["/w/a", "/w/b", "/w/c", "/w/ai-pet", "/w/robot", "/w/agent-bell"]
-            .map { ProjectInfo.colorIndex(root: $0, count: 6) }
-        #expect(picks.allSatisfy { (0..<6).contains($0) })
-        #expect(Set(picks).count > 1)
-    }
 }

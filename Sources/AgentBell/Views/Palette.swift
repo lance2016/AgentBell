@@ -1,5 +1,4 @@
 import AppKit
-import BellCore
 import SwiftUI
 
 enum Palette {
@@ -11,6 +10,11 @@ enum Palette {
     static let graphite = rgb(0x3A3A3C)
     /// The one accent: a muted violet for what is picked and for a session's task tag.
     static let accent = dynamic(light: 0x6B5FC7, dark: 0xB2A8F2)
+
+    static let attentionTile = dynamic(light: 0x3859A8, dark: 0x9BB7FF)
+    static let tasksTile = dynamic(light: 0x1E6C5D, dark: 0x79D6BA)
+    static let reviewsTile = dynamic(light: 0x7245A0, dark: 0xCEA6F5)
+    static let weeklyTile = dynamic(light: 0x8C531C, dark: 0xF0B779)
 
     /// Cards: white on the content pane, a faint lift in dark mode.
     static let card = dynamic(light: (0xFFFFFF, 1), dark: (0xFFFFFF, 0.06))
@@ -58,35 +62,33 @@ extension Color {
         scheme == .dark ? .white : Color(nsColor: Palette.graphite)
     }
 
-    /// The sidebar's pages, each with its own tile colour as in System Settings.
-    static let attentionTile = Color(nsColor: .systemBlue)
-    static let tasksTile = Color(nsColor: .systemGray)
-    static let reviewsTile = Color(nsColor: .systemGray)
-
-    /// Project tiles stay clear of the lamps' amber, blue, green and red, so a tile never
-    /// reads as a state. System colours follow dark mode and increased contrast.
-    private static let projectTiles: [NSColor] = [
-        .systemIndigo, .systemPurple, .systemPink, .systemTeal, .systemBrown
-    ]
-
-    /// The same colour for a project in every launch and in every place it is shown.
-    static func project(_ root: String) -> Color {
-        Color(nsColor: projectTiles[ProjectInfo.colorIndex(root: root, count: projectTiles.count)])
-    }
+    static let attentionTile = Color(nsColor: Palette.attentionTile)
+    static let tasksTile = Color(nsColor: Palette.tasksTile)
+    static let reviewsTile = Color(nsColor: Palette.reviewsTile)
+    static let weeklyTile = Color(nsColor: Palette.weeklyTile)
 }
 
-/// A white glyph on a small coloured square, as System Settings marks its panes. It says
-/// what a row is, never how it stands: that is the lamps' job.
+/// A tinted glyph on a softer surface for navigation pages.
 struct IconTile: View {
     let symbol: String
     let color: Color
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: 10.5, weight: .medium))
-            .foregroundStyle(.white)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(color)
             .frame(width: 20, height: 20)
-            .background(color, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .background(color.opacity(0.13), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
+struct ProjectFolderIcon: View {
+    var body: some View {
+        Image(systemName: "folder")
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(Color(nsColor: .systemBlue))
+            .frame(width: 20, height: 20)
             .accessibilityHidden(true)
     }
 }

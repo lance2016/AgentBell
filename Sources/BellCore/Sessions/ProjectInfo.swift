@@ -22,16 +22,6 @@ public struct ProjectInfo: Sendable, Equatable, Codable {
 
     public var name: String { (root as NSString).lastPathComponent }
 
-    /// A stable pick among `count` colours for a project folder: FNV-1a over the path,
-    /// so it is the same on every launch, which `hashValue` is not.
-    public static func colorIndex(root: String, count: Int) -> Int {
-        var hash: UInt64 = 0xCBF2_9CE4_8422_2325
-        for byte in root.utf8 {
-            hash = (hash ^ UInt64(byte)) &* 0x0000_0100_0000_01B3
-        }
-        return Int(hash % UInt64(max(count, 1)))
-    }
-
     /// Reads `.git` directly instead of running `git`: a couple of small file reads per
     /// poll, no child process.
     ///

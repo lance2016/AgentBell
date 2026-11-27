@@ -600,7 +600,7 @@ struct PanelView: View {
                                   newSession: { actions.launchInProject(group.id) },
                                   newReview: reviewAction(for: group.id),
                                   reveal: { actions.revealProject(group.id) }) { hovering in
-                        let heading = projectHeading(group.name, root: group.id,
+                        let heading = projectHeading(group.name,
                                                      count: hovering ? nil : group.sessions.count,
                                                      expanded: state.searchVisible ? nil : expanded)
                         if state.searchVisible {
@@ -642,9 +642,9 @@ struct PanelView: View {
         .frame(maxWidth: .infinity, minHeight: 128)
     }
 
-    private func projectHeading(_ name: String, root: String, count: Int?, expanded: Bool?) -> some View {
+    private func projectHeading(_ name: String, count: Int?, expanded: Bool?) -> some View {
         HStack(spacing: 8) {
-            IconTile(symbol: "folder.fill", color: .project(root))
+            ProjectFolderIcon()
             Text(name).font(.groupName).lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 4)
             if let count { CountBadge(count: count).accessibilityLabel("\(count) 个会话") }

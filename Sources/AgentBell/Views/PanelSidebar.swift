@@ -101,7 +101,7 @@ extension PanelView {
     /// The count is what is not done yet.
     private func sidebarTasks(picked: Bool) -> some View {
         let count = store.tasks.tasks.count { $0.status != .done }
-        return sidebarPage("开发任务", symbol: "chevron.left.forwardslash.chevron.right", tint: .tasksTile,
+        return sidebarPage("开发任务", symbol: "checklist", tint: .tasksTile,
                            count: count, picked: picked) {
             state.showTasks(true)
         }
@@ -188,9 +188,7 @@ private struct ProjectItem: View {
     var body: some View {
         Button(action: onPick) {
             HStack(spacing: 8) {
-                // Who it is on the left, as in System Settings; how it stands at the end.
-                IconTile(symbol: "folder.fill", color: .project(project.id))
-                    .opacity(project.live.isEmpty ? 0.5 : 1)
+                ProjectFolderIcon()
                 Text(project.name)
                     .font(.system(size: 13))
                     .foregroundStyle(project.live.isEmpty ? .secondary : .primary)
