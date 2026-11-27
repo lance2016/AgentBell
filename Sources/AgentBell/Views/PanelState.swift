@@ -8,6 +8,9 @@ import Observation
 @Observable
 final class PanelState {
     var isVisible = false
+    /// The picked terminal when it is too old for AgentBell, with its version; checked
+    /// each time the panel opens, so updating it clears the notice.
+    var outdatedTerminal: (app: TerminalApp, version: String)?
     var selectedID: String?
     /// The selection is drawn only once the arrow keys moved it, as in a menu; until
     /// then it only tells ⌘C and ⌘I which row they act on.
@@ -85,6 +88,8 @@ final class PanelState {
     var detailID: String?
     /// The session whose detail has its title open for editing.
     var renamingID: String?
+    /// The session waiting for "关闭会话" to be confirmed.
+    var closingID: String?
     var terminalFallback: (sessionID: String, pid: pid_t?)?
     /// The project the sidebar shows; the first one when nil or gone.
     var pickedProject: String?

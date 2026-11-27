@@ -7,7 +7,34 @@ enum ReviewPreference {
     static let baseBranch = "review.baseBranch"
     static let template = "review.promptTemplate"
     static let requireCurrentTarget = "review.requireCurrentTarget"
+    static let model = "review.model"
+    /// Where reports are saved; empty for `ReviewArchive.defaultRoot`.
+    static let reportsFolder = "review.reportsFolder"
     private static let additionalRepositories = "review.additionalRepositories"
+
+    static var reportsRoot: URL {
+        let path = UserDefaults.standard.string(forKey: reportsFolder) ?? ""
+        return path.isEmpty ? ReviewArchive.defaultRoot : URL(fileURLWithPath: path, isDirectory: true)
+    }
+
+    @MainActor static func chooseReportsFolder() -> String? {
+        let panel = NSOpenPanel()
+        panel.title = "选择审查报告的保存位置"
+        panel.prompt = "选择"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = reportsRoot
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        return url.path
+    }
+
+    /// Opens the folder, made first so Finder has something to show.
+    @MainActor static func revealReportsFolder() {
+        try? FileManager.default.createDirectory(at: reportsRoot, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(reportsRoot)
+    }
 
     @MainActor static func projects(in store: SessionStore) -> [String] {
         let sessions = PanelLayout.projects(live: store.liveSessions, recent: store.tracker.recent,
@@ -16,7 +43,8 @@ enum ReviewPreference {
         let tasks = store.tasks.tasks.flatMap { $0.workspaces.map(\.projectRoot) }
         var seen: Set<String> = []
         return (store.pinnedProjects + sessions.map(\.id) + tasks + extra).filter {
-            seen.insert($0).inserted && FileManager.default.fileExists(atPath: ($0 as NSString).appendingPathComponent(".git"))
+            seen.insert($0).inserted && !ReviewRunner.isReviewCheckout($0)
+                && FileManager.default.fileExists(atPath: ($0 as NSString).appendingPathComponent(".git"))
         }
     }
 
@@ -53,6 +81,8 @@ struct ReviewSettings: View {
     @AppStorage(ReviewPreference.baseBranch) private var baseBranch = "main"
     @AppStorage(ReviewPreference.template) private var template = ReviewRunner.defaultTemplate
     @AppStorage(ReviewPreference.requireCurrentTarget) private var requireCurrentTarget = true
+    @AppStorage(ReviewPreference.model) private var model = ReviewModel.recommended
+    @AppStorage(ReviewPreference.reportsFolder) private var reportsFolder = ""
 
     private var projects: [String] {
         let existing = ReviewPreference.projects(in: store)
@@ -87,6 +117,27 @@ struct ReviewSettings: View {
                 }
                 TextField("仅输入分支时的目标分支", text: $baseBranch)
                 Toggle("要求源分支基于最新目标分支", isOn: $requireCurrentTarget)
+            }
+            Section("审查结果") {
+                Picker("默认模型", selection: $model) {
+                    ForEach(ReviewModel.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Button("更改…") {
+                            if let path = ReviewPreference.chooseReportsFolder() { reportsFolder = path }
+                        }
+                        Button("在访达中显示") { ReviewPreference.revealReportsFolder() }
+                        if !reportsFolder.isEmpty {
+                            Button("恢复默认") { reportsFolder = "" }
+                        }
+                    }
+                } label: {
+                    Text("保存位置")
+                    Text((ReviewPreference.reportsRoot.path as NSString).abbreviatingWithTildeInPath)
+                        .textSelection(.enabled)
+                        .help("每次审查保存为一个文件夹，内含 report.md。更改位置后，已有报告仍留在原文件夹。")
+                }
             }
             Section("Review 模板") {
                 TextEditor(text: $template)

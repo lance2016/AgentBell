@@ -3,10 +3,6 @@ import Foundation
 public struct SessionGroup: Sendable, Equatable, Identifiable {
     public let id: String
     public let name: String
-    /// Shown next to the group name when every session is on the same branch.
-    public let branch: String?
-    /// True when sessions sit on different branches; each row then shows its own.
-    public let branchPerRow: Bool
     public let sessions: [Session]
 }
 
@@ -14,8 +10,6 @@ public struct SessionGroup: Sendable, Equatable, Identifiable {
 public struct ProjectEntry: Sendable, Equatable, Identifiable {
     public let id: String
     public let name: String
-    public let branch: String?
-    public let branchPerRow: Bool
     public let live: [Session]
     /// Most recently ended first.
     public let closed: [Session]
@@ -37,15 +31,7 @@ public enum PanelLayout {
         let byRoot = Dictionary(grouping: sessions, by: \.project.root)
         let groups = byRoot.map { root, members -> SessionGroup in
             let sorted = members.sorted(by: rowOrder)
-            let branches = Set(sorted.map(\.project.branch))
-            let shared = branches.count == 1 ? branches.first ?? nil : nil
-            return SessionGroup(
-                id: root,
-                name: sorted[0].project.name,
-                branch: shared,
-                branchPerRow: branches.count > 1,
-                sessions: sorted
-            )
+            return SessionGroup(id: root, name: sorted[0].project.name, sessions: sorted)
         }
         return pinnedFirst(groups.sorted(by: groupOrder), pinned: pinned)
     }
@@ -56,8 +42,7 @@ public enum PanelLayout {
         let closedByRoot = Dictionary(grouping: recent, by: \.project.root)
         let open = groups(live).map { group in
             ProjectEntry(
-                id: group.id, name: group.name, branch: group.branch, branchPerRow: group.branchPerRow,
-                live: group.sessions, closed: closedByRoot[group.id] ?? []
+                id: group.id, name: group.name, live: group.sessions, closed: closedByRoot[group.id] ?? []
             )
         }
         let openRoots = Set(open.map(\.id))
@@ -66,8 +51,7 @@ public enum PanelLayout {
             guard !closedOnly.contains(where: { $0.id == session.project.root }) else { continue }
             let closed = closedByRoot[session.project.root] ?? []
             closedOnly.append(ProjectEntry(
-                id: session.project.root, name: session.project.name, branch: session.project.branch,
-                branchPerRow: false, live: [], closed: closed
+                id: session.project.root, name: session.project.name, live: [], closed: closed
             ))
         }
         return pinnedFirst(open + closedOnly, pinned: pinned)

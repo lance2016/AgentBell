@@ -10,21 +10,36 @@ public struct ProjectInfo: Sendable, Equatable, Codable {
     /// The top folder of the linked worktree the session works in; nil in the main
     /// checkout, a submodule, or outside a repository.
     public var worktree: String?
+    /// Set when the worktree is one AgentBell made for a code review.
+    public var review: ReviewCheckout?
 
-    public init(root: String, branch: String?, worktree: String? = nil) {
+    public init(root: String, branch: String?, worktree: String? = nil, review: ReviewCheckout? = nil) {
         self.root = root
         self.branch = branch
         self.worktree = worktree
+        self.review = review
     }
 
     public var name: String { (root as NSString).lastPathComponent }
+
+    /// A stable pick among `count` colours for a project folder: FNV-1a over the path,
+    /// so it is the same on every launch, which `hashValue` is not.
+    public static func colorIndex(root: String, count: Int) -> Int {
+        var hash: UInt64 = 0xCBF2_9CE4_8422_2325
+        for byte in root.utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x0000_0100_0000_01B3
+        }
+        return Int(hash % UInt64(max(count, 1)))
+    }
 
     /// Reads `.git` directly instead of running `git`: a couple of small file reads per
     /// poll, no child process.
     ///
     /// The search stops below `home`: a repository in the home folder is a dotfiles repo,
     /// and treating it as the project would lump every non-repo folder into one group.
-    public static func lookup(cwd: String, home: String = NSHomeDirectory()) -> ProjectInfo {
+    public static func lookup(
+        cwd: String, home: String = NSHomeDirectory(), reviews: String = ReviewRunner.checkoutsRoot.path
+    ) -> ProjectInfo {
         var directory = (cwd as NSString).standardizingPath
         let home = (home as NSString).standardizingPath
         while directory != home {
@@ -36,8 +51,10 @@ public struct ProjectInfo: Sendable, Equatable, Codable {
                 }
                 if let gitDir = linkedGitDir(dotGitFile: dotGit, in: directory) {
                     let main = mainRoot(gitDir: gitDir)
+                    let review = main != nil && ReviewRunner.isReviewCheckout(directory, reviews: reviews)
                     return ProjectInfo(root: main ?? directory, branch: branch(gitDir: gitDir),
-                                       worktree: main == nil ? nil : directory)
+                                       worktree: main == nil ? nil : directory,
+                                       review: review ? ReviewCheckout.read(checkout: directory) : nil)
                 }
             }
             let parent = (directory as NSString).deletingLastPathComponent

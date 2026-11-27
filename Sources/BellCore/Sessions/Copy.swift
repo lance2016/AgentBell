@@ -44,10 +44,11 @@ public enum Copy {
         return summary?.lastReply ?? prompt
     }
 
-    /// The row's "你：" line: what was asked last, unless the title already is that.
+    /// The row's "你：" line: what was asked last, unless the title already is that or
+    /// AgentBell asked it to start a review.
     public static func asked(_ session: Session) -> String? {
-        let prompt = lastPrompt(session)
-        return prompt.map(Session.promptTitle) == session.title ? nil : prompt
+        guard let prompt = lastPrompt(session), session.project.review?.isRequest(prompt) != true else { return nil }
+        return Session.promptTitle(prompt) == session.title ? nil : prompt
     }
 
     /// Under it: what the session is doing or waiting for, or how its last round came
@@ -73,6 +74,14 @@ public enum Copy {
             return Summary(text: asked, asked: true)
         }
         return Summary(text: line, asked: false)
+    }
+
+    /// With room for two lines: what was asked, then where it stands. One line when the
+    /// other would add nothing, as `summary` decides.
+    public static func summaryLines(_ session: Session) -> [Summary] {
+        let line = summary(session)
+        guard !line.asked, let asked = asked(session) else { return [line] }
+        return [Summary(text: asked, asked: true), line]
     }
 
     private static func lastPrompt(_ session: Session) -> String? {

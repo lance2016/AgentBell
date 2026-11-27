@@ -43,6 +43,33 @@ public enum TerminalApp: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// The oldest version AgentBell's scripts work with; nil when any will do. The Ghostty
+    /// scripts are written against 1.4.0 and fail on older releases.
+    public var minimumVersion: String? {
+        self == .ghostty ? "1.4.0" : nil
+    }
+
+    /// True when `version` (the bundle's short version) is below `minimumVersion`. Only
+    /// the leading numbers count, so "1.4.0-tip+abc" is 1.4.0; a version with none, or
+    /// none at all, is not held against the app.
+    public func isOutdated(version: String?) -> Bool {
+        guard let minimum = minimumVersion.map(Self.numbers),
+              let installed = version.map(Self.numbers), !installed.isEmpty
+        else { return false }
+        for index in 0..<max(minimum.count, installed.count) {
+            let have = index < installed.count ? installed[index] : 0
+            let need = index < minimum.count ? minimum[index] : 0
+            if have != need { return have < need }
+        }
+        return false
+    }
+
+    /// "1.4.0-tip+abc" → [1, 4, 0]: the dotted numbers before anything else.
+    private static func numbers(_ version: String) -> [Int] {
+        let core = version.prefix { $0.isNumber || $0 == "." }
+        return core.split(separator: ".").compactMap { Int($0) }
+    }
+
     public init?(bundleID: String) {
         guard let app = Self.allCases.first(where: { $0.bundleID == bundleID }) else { return nil }
         self = app

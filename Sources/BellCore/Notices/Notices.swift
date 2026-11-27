@@ -34,6 +34,14 @@ public struct Notice: Sendable, Equatable {
     public let subtitle: String?
     public let body: String?
 
+    public init(session: String, kind: Kind, title: String, subtitle: String? = nil, body: String? = nil) {
+        self.session = session
+        self.kind = kind
+        self.title = title
+        self.subtitle = subtitle
+        self.body = body
+    }
+
     /// One notification per session and kind: a newer one replaces the older.
     public var id: String { Self.id(session, kind) }
     /// A finished round is good news, not a call to act.

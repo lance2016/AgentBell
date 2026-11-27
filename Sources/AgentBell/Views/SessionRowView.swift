@@ -7,15 +7,18 @@ import SwiftUI
 struct SessionRowView: View {
     let session: Session
     let now: Date
-    let rowBranch: String?
     let showProject: Bool
     let compact: Bool
+    /// The list has room for the question and where it stands, each on its own line.
+    let wide: Bool
     let selected: Bool
     let feedback: String?
     let statusPending: Bool
     let onActivate: () -> Void
     let onCopy: () -> Void
     let onReveal: () -> Void
+    /// Nil once the session has ended: there is no process left to close.
+    let onClose: (() -> Void)?
     let onDetail: () -> Void
     /// The name is open for editing in the row.
     @Binding var renaming: Bool
@@ -34,12 +37,31 @@ struct SessionRowView: View {
         compact ? nil : tasks.tasks(containing: session.id).first { $0.status != .done }
     }
 
+    private var review: ReviewCheckout? { session.project.review }
+
+    /// A review's checkout is a detached commit: what it compares says more.
+    private var branch: String? { review == nil ? session.project.branch : review?.range }
+
+    /// A worktree of the user's own; a review's checkout is told by its icon instead.
+    private var worktreeName: String? {
+        guard review == nil, let worktree = session.project.worktree else { return nil }
+        return (worktree as NSString).lastPathComponent
+    }
+
+    /// The icon is hidden from VoiceOver, so the kind of session is said here.
+    private var kindDescription: String? {
+        guard review != nil else { return branch.map { "分支 \($0)" } }
+        return review?.range.map { "代码审查 \($0)" } ?? "代码审查"
+    }
+
     private var accessibilityValue: String {
-        [statusPending ? "会话状态待确认" : nil,
-         rowBranch.map { "分支 \($0)" },
-         task.map { "任务 \($0.title)" }]
-            .compactMap { $0 }
-            .joined(separator: "，")
+        let parts: [String?] = [
+            statusPending ? "会话状态待确认" : nil,
+            kindDescription,
+            worktreeName.map { "worktree \($0)" },
+            task.map { "任务 \($0.title)" }
+        ]
+        return parts.compactMap { $0 }.joined(separator: "，")
     }
 
     var body: some View {
@@ -57,6 +79,15 @@ struct SessionRowView: View {
                 Button(action: onActivate) {
                     rowContent {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            if review != nil {
+                                // A kind of session, not a state: quiet beside the lamp.
+                                Image(systemName: "text.magnifyingglass")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.trailing, -4)
+                                    .help("代码审查")
+                                    .accessibilityHidden(true)
+                            }
                             Text(session.title)
                                 .font(session.isEnded ? .rowTitle : .sessionTitle)
                                 .foregroundStyle(session.isEnded ? .secondary : .primary)
@@ -80,6 +111,9 @@ struct SessionRowView: View {
                 .accessibilityAction(named: "复制恢复命令", onCopy)
                 .accessibilityAction(named: "在访达中显示", onReveal)
                 .accessibilityAction(named: "重命名") { renaming = true }
+                .accessibilityActions {
+                    if let onClose { Button("关闭会话", action: onClose) }
+                }
 
                 // Both level with the title, however many lines stand under it.
                 RenameButton(title: session.title) { renaming = true }
@@ -97,6 +131,23 @@ struct SessionRowView: View {
                 .padding(.top, compact ? 4 : 6)
                 .help("查看详情（⌘I）")
                 .accessibilityLabel("查看详情：\(session.title)")
+                if let onClose {
+                    // Shown on the row being pointed at or picked, so a stray click near
+                    // the details button does not end a session. It still asks first.
+                    Button(action: onClose) {
+                        Image(systemName: "xmark.circle")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .frame(width: BellLayout.inlineControlSize, height: BellLayout.inlineControlSize)
+                    }
+                    .buttonStyle(BellButtonStyle(radius: BellLayout.controlRadius))
+                    .padding(.trailing, 6)
+                    .padding(.top, compact ? 4 : 6)
+                    .opacity(hovered || selected ? 1 : 0)
+                    .allowsHitTesting(hovered || selected)
+                    .help("关闭会话")
+                    .accessibilityHidden(true)
+                }
             }
         }
         .background(selected ? BellLayout.selectionFill : hovered ? BellLayout.controlFill : .clear, in: shape)
@@ -105,7 +156,8 @@ struct SessionRowView: View {
         .onHover { hovered = $0 }
         .contextMenu {
             SessionCommands(onDetail: onDetail, onActivate: session.isEnded ? nil : onActivate,
-                            onCopy: onCopy, onReveal: onReveal, onRename: { renaming = true })
+                            onCopy: onCopy, onReveal: onReveal, onRename: { renaming = true },
+                            onClose: onClose)
             Menu("加入任务", systemImage: "checklist") {
                 TaskMenuItems(session: session, tasks: tasks, actions: taskActions)
             }
@@ -145,32 +197,40 @@ struct SessionRowView: View {
                 .font(.rowDetail)
                 .foregroundStyle(.secondary)
         } else if !compact {
-            let summary = Copy.summary(session)
-            Group {
-                if summary.asked {
-                    Text("你：").foregroundStyle(.tertiary) + Text(summary.text)
-                } else {
-                    Text(summary.text)
+            let lines = wide ? Copy.summaryLines(session) : [Copy.summary(session)]
+            ForEach(lines.indices, id: \.self) { index in
+                let line = lines[index]
+                Group {
+                    if line.asked {
+                        Text("你：").foregroundStyle(.tertiary) + Text(line.text)
+                    } else {
+                        Text(line.text)
+                    }
                 }
+                .font(.rowDetail)
+                // The question stays quiet; only what it waits for takes the amber.
+                .foregroundStyle(kind == .waiting && !line.asked ? Color.amberText : .secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
             }
-            .font(.rowDetail)
-            .foregroundStyle(kind == .waiting ? Color.amberText : .secondary)
-            .lineLimit(1)
-            .truncationMode(.tail)
         }
     }
 
-    /// Project, branch and task, each only when there is one; no line at all otherwise.
+    /// Project, branch, worktree and task, each only when there is one; no line at all
+    /// otherwise. Closed rows keep to their name.
     @ViewBuilder private var meta: some View {
         let project = showProject ? session.project.name : nil
-        if project != nil || rowBranch != nil || task != nil {
+        if !compact, project != nil || branch != nil || worktreeName != nil || task != nil {
             HStack(spacing: 6) {
                 if let project {
                     MetaChip(text: project, symbol: "folder")
                 }
-                if let rowBranch {
-                    MetaChip(text: rowBranch, symbol: "arrow.triangle.branch", monospaced: true)
+                if let branch {
+                    MetaChip(text: branch, symbol: "arrow.triangle.branch", monospaced: true)
                         .layoutPriority(1)
+                }
+                if let worktreeName {
+                    MetaChip(text: "worktree \(worktreeName)", symbol: "rectangle.stack")
                 }
                 if let task {
                     MetaChip(text: task.title, symbol: "checklist", tint: .bellAccent)
@@ -213,6 +273,7 @@ struct SessionCommands: View {
     var onCopy: (() -> Void)? = nil
     let onReveal: () -> Void
     var onRename: (() -> Void)? = nil
+    var onClose: (() -> Void)? = nil
 
     var body: some View {
         if let onActivate {
@@ -228,6 +289,10 @@ struct SessionCommands: View {
         if let onDetail {
             Divider()
             Button("查看详情", systemImage: "info.circle", action: onDetail)
+        }
+        if let onClose {
+            Divider()
+            Button("关闭会话…", systemImage: "xmark.circle", role: .destructive, action: onClose)
         }
     }
 }

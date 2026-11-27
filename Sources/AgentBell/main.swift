@@ -17,13 +17,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         installMainMenu()
         let settings = SettingsWindowController(store: store)
-        let review = ReviewWindowController(store: store, openSettings: { settings.showReview() })
+        let reviews = ReviewStore(sessions: store)
+        let review = ReviewWindowController(store: store, reviews: reviews, openSettings: { settings.showReview() })
         let panel = PanelController(store: store, presentation: .popover)
         let window = PanelController(store: store, presentation: .window)
         panel.openSettings = { settings.show() }
         window.openSettings = { settings.show() }
-        panel.openReview = { review.show() }
-        window.openReview = { review.show() }
+        // "新建会话 → 代码审查" asks for a new review: the window opens on the form.
+        panel.openReview = { review.show(selecting: nil) }
+        window.openReview = { review.show(selecting: nil) }
         // In the Dock and the app switcher while the window is open, as a regular app.
         window.onVisibilityChange = { shown in
             NSApp.setActivationPolicy(shown ? .regular : .accessory)
@@ -35,13 +37,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         desktop.onClick = { [weak window] in window?.toggleFromIcon() }
         desktop.openWindow = { [weak window] in window?.show() }
         desktop.openSettings = { settings.showDesktop() }
-        desktop.bubbles.onOpen = { [weak window] id in window?.open(sessionID: id) }
+        desktop.bubbles.onOpen = { [weak window] id in
+            if id.hasPrefix(Notifier.reviewPrefix) {
+                review.show(selecting: String(id.dropFirst(Notifier.reviewPrefix.count)))
+            } else {
+                window?.open(sessionID: id)
+            }
+        }
         store.notifier.onChanges = { [weak desktop] changes in desktop?.applyNotices(changes) }
         // A notification for a session that has ended opens the panel instead; the
         // window when the menu bar icon is off.
         store.notifier.onOpen = { [weak panel, weak window] id in
             (Entry.menuBar ? panel : window)?.open(sessionID: id)
         }
+        store.notifier.onOpenReview = { review.show(selecting: $0) }
 
         self.settings = settings
         self.panel = panel

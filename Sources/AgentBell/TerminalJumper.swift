@@ -34,6 +34,25 @@ extension TerminalApp {
     var isInstalled: Bool {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
     }
+
+    /// The installed copy's version, read from its Info.plist each time: `Bundle(url:)`
+    /// caches, and would keep the old version after the app is updated in place.
+    var installedVersion: String? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+              let info = NSDictionary(contentsOf: url.appendingPathComponent("Contents/Info.plist"))
+        else { return nil }
+        return info["CFBundleShortVersionString"] as? String
+    }
+
+    /// The installed version when it is too old for AgentBell's scripts; nil otherwise.
+    var outdatedVersion: String? {
+        installedVersion.flatMap { isOutdated(version: $0) ? $0 : nil }
+    }
+
+    /// "Ghostty 1.3.1 太旧，需要 1.4.0 或更新".
+    func outdatedNote(_ version: String) -> String {
+        "\(title) \(version) 太旧，需要 \(minimumVersion ?? "") 或更新"
+    }
 }
 
 /// Brings a session's terminal to the front (DESIGN.md §3.7).
@@ -49,13 +68,16 @@ enum TerminalJumper {
     }
 
     enum LaunchError: LocalizedError {
-        case missing(TerminalApp), permissionDenied(TerminalApp), failed(TerminalApp)
+        case missing(TerminalApp), outdated(TerminalApp, String), permissionDenied(TerminalApp), failed(TerminalApp)
 
         var errorDescription: String? {
             switch self {
             case .missing(let app):
                 let download = app.downloadPage?.host().map { "，或去 \($0) 下载" } ?? ""
                 return "\(app.title) 还没安装。可以在「设置 › 通用」换一个终端\(download)。"
+            case .outdated(let app, let version):
+                let download = app.downloadPage?.host().map { "（\($0)）" } ?? ""
+                return "\(app.outdatedNote(version))。请先更新\(download)，或在「设置 › 通用」换一个终端。"
             case .permissionDenied(let app):
                 return "请在「系统设置 › 隐私与安全性 › 自动化」允许 AgentBell 控制\(app.inSentence)。"
                     .replacingOccurrences(of: " 。", with: "。")
@@ -75,6 +97,7 @@ enum TerminalJumper {
         if let resumeSessionID, !resuming.insert(resumeSessionID).inserted { return }
         defer { if let resumeSessionID { resuming.remove(resumeSessionID) } }
         guard app.isInstalled else { throw LaunchError.missing(app) }
+        if let version = app.outdatedVersion { throw LaunchError.outdated(app, version) }
 
         let permission = AutomationPermission.of(app)
         if permission == .denied { throw LaunchError.permissionDenied(app) }

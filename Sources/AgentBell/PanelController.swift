@@ -138,6 +138,8 @@ final class PanelController {
         let wasShown = isShown
         if !wasShown {
             state.resetSelection(store)
+            let terminal = TerminalApp.current
+            state.outdatedTerminal = terminal.outdatedVersion.map { (terminal, $0) }
             state.isVisible = true
             store.panelDidShow()
             // Before activating: the window turns the Dock icon on, and only an app that
@@ -245,6 +247,7 @@ final class PanelController {
         let actions = PanelActions(
             activate: { [weak self] in self?.activate($0) },
             copyResume: { [weak self] in self?.copyResume($0, message: "已复制恢复命令") },
+            closeSession: { [weak self] in self?.closeSession($0) },
             reveal: { [weak self] in self?.revealDirectory($0.cwd) },
             revealProject: { [weak self] in self?.revealDirectory($0) },
             launchInProject: { [weak self] in self?.launchClaude(project: $0) },
@@ -480,6 +483,16 @@ final class PanelController {
             dismiss()
         } else {
             showTerminalFallback(for: session, pid: nil)
+        }
+    }
+
+    /// The row moves to 已关闭 on the next poll, which this asks for at once.
+    private func closeSession(_ session: Session) {
+        if SessionStopper.stop(session) {
+            state.showFeedback("正在关闭…", for: session.id)
+            store.pollNow()
+        } else {
+            state.showFeedback("没能关闭：找不到这个会话的 Claude 进程", for: session.id)
         }
     }
 

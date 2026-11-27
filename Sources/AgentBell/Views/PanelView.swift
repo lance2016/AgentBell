@@ -4,6 +4,8 @@ import SwiftUI
 struct PanelActions {
     let activate: (Session) -> Void
     let copyResume: (Session) -> Void
+    /// Ends the session's `claude` process; asked for only after it was confirmed.
+    let closeSession: (Session) -> Void
     let reveal: (Session) -> Void
     let revealProject: (String) -> Void
     let launchInProject: (String) -> Void
@@ -29,6 +31,8 @@ struct PanelView: View {
     @AppStorage(PanelStyle.key) private var style = PanelStyle.list
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var searchFocused: Bool
+    /// The session list's own width, which decides how much a row says.
+    @State private var listWidth: CGFloat = 0
 
     /// As in System Settings: the sidebar stays put while the content pane moves between
     /// a project's sessions, search results and a session's detail.
@@ -62,6 +66,12 @@ struct PanelView: View {
             }
         }
         .ignoresSafeArea()
+        .alert(closingTitle, isPresented: closing, presenting: closingSession) { session in
+            Button("关闭会话", role: .destructive) { actions.closeSession(session) }
+            Button("取消", role: .cancel) {}
+        } message: { _ in
+            Text("会结束这个会话的 Claude 进程，正在进行的这一轮会中断。对话会保留，之后可以用 claude --resume 恢复。")
+        }
         .environment(\.lampsAnimate, state.isVisible)
         .onChange(of: style) { _, style in state.preserveSelection(afterSwitchTo: style, store) }
         .onChange(of: state.searchVisible) { _, visible in searchFocused = visible }
@@ -70,6 +80,20 @@ struct PanelView: View {
             searchFocused = id == nil && state.searchVisible
             if state.renamingID != id { state.renamingID = nil }
         }
+    }
+
+    private var closingSession: Session? {
+        state.closingID.flatMap { id in store.liveSessions.first { $0.id == id } }
+    }
+
+    private var closingTitle: String {
+        closingSession.map { "关闭「\($0.title)」？" } ?? "关闭会话？"
+    }
+
+    /// Asked before ending a process: the round in progress is lost (HIG: confirm a
+    /// destructive action whose result is hard to take back).
+    private var closing: Binding<Bool> {
+        Binding(get: { closingSession != nil }, set: { if !$0 { state.closingID = nil } })
     }
 
     /// One column: the app's name and search on top, or the way back from a detail. In
@@ -109,10 +133,6 @@ struct PanelView: View {
                 pageTitle("待处理")
             } else if let project = state.pickedEntry(store) {
                 projectTitle(project.name)
-                // One branch for the whole project goes here; mixed ones are on each row.
-                if !project.branchPerRow, let branch = project.branch {
-                    BranchTag(branch: branch).layoutPriority(-1)
-                }
                 if let caption = Copy.header(project.live) {
                     Text(caption)
                         .font(.rowDetail)
@@ -205,7 +225,9 @@ struct PanelView: View {
             // the text and the indicator have to say what it does.
             Label("新建会话", systemImage: "plus")
         }
-        .menuStyle(.borderlessButton)
+        // The page's one main action: filled with the system accent the user picked.
+        .menuStyle(.button)
+        .buttonStyle(.borderedProminent)
         .menuIndicator(.visible)
         .fixedSize()
         .help("在项目里新建 Claude 会话")
@@ -345,6 +367,7 @@ struct PanelView: View {
             }
             .padding(BellLayout.inset)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
         .id(browserID)
     }
 
@@ -354,7 +377,7 @@ struct PanelView: View {
             if sessions.isEmpty {
                 ContentUnavailableView("没有待处理会话", systemImage: "checkmark.circle")
             } else {
-                sessionRows(sessions, now: now, mixedBranches: true, showProject: true)
+                sessionRows(sessions, now: now, showProject: true)
                     .modifier(SessionGroupSurface())
             }
         }
@@ -450,6 +473,11 @@ struct PanelView: View {
                 actionTitle: connection == .notConnected ? "连接" : "重试",
                 action: actions.connectHooks
             )
+        } else if let outdated = state.outdatedTerminal, let page = outdated.app.downloadPage {
+            // New sessions cannot open and jumps lose the exact pane until it is updated.
+            noticeRow(outdated.app.outdatedNote(outdated.version), actionTitle: "更新", symbol: "arrow.down.circle") {
+                NSWorkspace.shared.open(page)
+            }
         } else {
             switch store.notifier.permission {
             case .allowed, .unknown:
@@ -524,7 +552,7 @@ struct PanelView: View {
                                   toggle: { store.toggleProjectPin(group.id) },
                                   newSession: { actions.launchInProject(group.id) },
                                   reveal: { actions.revealProject(group.id) }) { hovering in
-                        let heading = projectHeading(group.name, branch: group.branch,
+                        let heading = projectHeading(group.name, root: group.id,
                                                      count: hovering ? nil : group.sessions.count,
                                                      expanded: state.searchVisible ? nil : expanded)
                         if state.searchVisible {
@@ -537,7 +565,7 @@ struct PanelView: View {
                     }
                     if expanded {
                         CardDivider()
-                        sessionRows(group.sessions, now: now, mixedBranches: group.branchPerRow)
+                        sessionRows(group.sessions, now: now)
                     }
                 }
                 .modifier(SessionGroupSurface())
@@ -566,15 +594,11 @@ struct PanelView: View {
         .frame(maxWidth: .infinity, minHeight: 128)
     }
 
-    private func projectHeading(_ name: String, branch: String?, count: Int?, expanded: Bool?) -> some View {
+    private func projectHeading(_ name: String, root: String, count: Int?, expanded: Bool?) -> some View {
         HStack(spacing: 8) {
-            PanelSymbol(name: "folder")
+            IconTile(symbol: "folder.fill", color: .project(root))
             Text(name).font(.groupName).lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 4)
-            if let branch {
-                BranchTag(branch: branch)
-                    .frame(maxWidth: 120, alignment: .trailing)
-            }
             if let count { CountBadge(count: count).accessibilityLabel("\(count) 个会话") }
             disclosure(expanded)
         }
@@ -626,15 +650,14 @@ struct PanelView: View {
         }
     }
 
-    func sessionRows(_ sessions: [Session], now: Date, mixedBranches: Bool = false,
-                     compact: Bool = false, showProject: Bool = false) -> some View {
+    func sessionRows(_ sessions: [Session], now: Date, compact: Bool = false,
+                     showProject: Bool = false) -> some View {
         LazyVStack(spacing: 0) {
             ForEach(sessions) { session in
                 if session.id != sessions.first?.id {
                     CardDivider(leading: BellLayout.rowTextLeading)
                 }
-                row(session, now: now, rowBranch: mixedBranches ? session.project.branch : nil,
-                    compact: compact, showProject: showProject)
+                row(session, now: now, compact: compact, showProject: showProject)
             }
         }
         .padding(.vertical, BellLayout.rowInset)
@@ -642,14 +665,13 @@ struct PanelView: View {
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: sessions.map(\.id))
     }
 
-    private func row(_ session: Session, now: Date, rowBranch: String?, compact: Bool,
-                     showProject: Bool) -> some View {
+    private func row(_ session: Session, now: Date, compact: Bool, showProject: Bool) -> some View {
         SessionRowView(
             session: session,
             now: now,
-            rowBranch: rowBranch,
             showProject: showProject,
             compact: compact,
+            wide: listWidth >= BellLayout.wideRowWidth,
             selected: state.selectionShown && state.selectedID == session.id,
             feedback: state.feedbackText(for: session.id),
             statusPending: store.tracker.isPendingClosure(session.id),
@@ -659,6 +681,7 @@ struct PanelView: View {
             },
             onCopy: { actions.copyResume(session) },
             onReveal: { actions.reveal(session) },
+            onClose: session.isEnded ? nil : { state.closingID = session.id },
             onDetail: {
                 state.selectedID = session.id
                 state.detailID = session.id
@@ -693,6 +716,7 @@ struct PanelView: View {
                     onActivate: { actions.activate(session) },
                     onCopy: { actions.copyResume(session) },
                     onReveal: { actions.reveal(session) },
+                    onClose: session.isEnded ? nil : { state.closingID = session.id },
                     renaming: Binding(
                         get: { state.renamingID == session.id },
                         set: { state.renamingID = $0 ? session.id : nil }

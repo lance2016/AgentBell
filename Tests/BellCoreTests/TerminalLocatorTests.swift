@@ -57,6 +57,26 @@ struct TerminalAppTests {
         #expect(TerminalApp(bundleID: "com.microsoft.VSCode") == nil)
     }
 
+    /// AgentBell's Ghostty scripts need 1.4.0; the others have no floor.
+    @Test func ghosttyOlderThan140IsOutdated() {
+        #expect(TerminalApp.ghostty.minimumVersion == "1.4.0")
+        #expect(TerminalApp.ghostty.isOutdated(version: "1.3.1"))
+        #expect(TerminalApp.ghostty.isOutdated(version: "1.2"))
+        #expect(TerminalApp.ghostty.isOutdated(version: "0.9.9"))
+        #expect(!TerminalApp.ghostty.isOutdated(version: "1.4.0"))
+        #expect(!TerminalApp.ghostty.isOutdated(version: "1.4"))
+        #expect(!TerminalApp.ghostty.isOutdated(version: "1.10.0"))
+        #expect(!TerminalApp.ghostty.isOutdated(version: "2.0.0"))
+        // Tip builds carry a suffix after the numbers.
+        #expect(!TerminalApp.ghostty.isOutdated(version: "1.4.0-tip+0a1b2c3"))
+        #expect(TerminalApp.ghostty.isOutdated(version: "1.3.2-tip+0a1b2c3"))
+        // A version that cannot be read is not held against it.
+        #expect(!TerminalApp.ghostty.isOutdated(version: nil))
+        #expect(!TerminalApp.ghostty.isOutdated(version: "tip"))
+        #expect(!TerminalApp.iTerm.isOutdated(version: "1.0"))
+        #expect(TerminalApp.iTerm.minimumVersion == nil)
+    }
+
     @Test func theUsersChoiceStandsEvenWhenItIsGone() {
         let onlyTerminal: (TerminalApp) -> Bool = { $0 == .terminal }
         #expect(TerminalApp.resolve(stored: "iTerm", isInstalled: onlyTerminal) == .iTerm)

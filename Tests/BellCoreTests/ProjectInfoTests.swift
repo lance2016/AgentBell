@@ -51,6 +51,30 @@ struct ProjectInfoTests {
         #expect(info.root == box.path("main"))
         #expect(info.branch == "fix")
         #expect(info.worktree == box.path("wt"))
+        #expect(info.review == nil)
+    }
+
+    /// AgentBell's review checkouts: `<reviews>/<review>/<repository>`, with what it
+    /// reviews in `review.json` beside the checkout.
+    @Test func reviewCheckoutSaysWhatItReviews() throws {
+        let box = try Sandbox()
+        try box.write("main/.git/HEAD", "ref: refs/heads/main\n")
+        try box.write("main/.git/worktrees/main/HEAD", "0123456789abcdef\n")
+        try box.write("Reviews/R1/main/.git", "gitdir: \(box.path("main/.git/worktrees/main"))\n")
+        try box.write("Reviews/R1/review.json", #"{"sourceBranch":"feat/x","targetBranch":"main"}"#)
+        let info = ProjectInfo.lookup(cwd: box.path("Reviews/R1/main"), reviews: box.path("Reviews"))
+        #expect(info.root == box.path("main"))
+        #expect(info.review == ReviewCheckout(sourceBranch: "feat/x", targetBranch: "main"))
+    }
+
+    /// Checkouts from before `review.json` are still reviews; they just cannot say of what.
+    @Test func reviewCheckoutWithoutItsFileIsStillAReview() throws {
+        let box = try Sandbox()
+        try box.write("main/.git/HEAD", "ref: refs/heads/main\n")
+        try box.write("main/.git/worktrees/main/HEAD", "0123456789abcdef\n")
+        try box.write("Reviews/R1/main/.git", "gitdir: \(box.path("main/.git/worktrees/main"))\n")
+        let info = ProjectInfo.lookup(cwd: box.path("Reviews/R1/main"), reviews: box.path("Reviews"))
+        #expect(info.review == ReviewCheckout())
     }
 
     /// Claude Code puts its own worktrees inside the repository, under `.claude/worktrees`.
@@ -105,5 +129,15 @@ struct ProjectInfoTests {
         let info = ProjectInfo.lookup(cwd: box.path("plain"))
         #expect(info.root == box.path("plain"))
         #expect(info.branch == nil)
+    }
+
+    /// Each project keeps its colour across launches, which `hashValue` would not give.
+    @Test func colourIsStableAndInRange() {
+        #expect(ProjectInfo.colorIndex(root: "/w/agent-bell", count: 6) == 1)
+        #expect(ProjectInfo.colorIndex(root: "/w/robot", count: 6) == 0)
+        let picks = ["/w/a", "/w/b", "/w/c", "/w/ai-pet", "/w/robot", "/w/agent-bell"]
+            .map { ProjectInfo.colorIndex(root: $0, count: 6) }
+        #expect(picks.allSatisfy { (0..<6).contains($0) })
+        #expect(Set(picks).count > 1)
     }
 }

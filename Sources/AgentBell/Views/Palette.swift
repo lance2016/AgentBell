@@ -1,4 +1,5 @@
 import AppKit
+import BellCore
 import SwiftUI
 
 enum Palette {
@@ -56,6 +57,52 @@ extension Color {
     static func mainButton(_ scheme: ColorScheme) -> Color {
         scheme == .dark ? .white : Color(nsColor: Palette.graphite)
     }
+
+    /// The sidebar's pages, each with its own tile colour as in System Settings.
+    static let attentionTile = Color(nsColor: .systemBlue)
+    static let tasksTile = Color(nsColor: .systemGray)
+
+    /// Project tiles stay clear of the lamps' amber, blue, green and red, so a tile never
+    /// reads as a state. System colours follow dark mode and increased contrast.
+    private static let projectTiles: [NSColor] = [
+        .systemIndigo, .systemPurple, .systemPink, .systemTeal, .systemBrown
+    ]
+
+    /// The same colour for a project in every launch and in every place it is shown.
+    static func project(_ root: String) -> Color {
+        Color(nsColor: projectTiles[ProjectInfo.colorIndex(root: root, count: projectTiles.count)])
+    }
+}
+
+/// A white glyph on a small coloured square, as System Settings marks its panes. It says
+/// what a row is, never how it stands: that is the lamps' job.
+struct IconTile: View {
+    let symbol: String
+    let color: Color
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundStyle(.white)
+            .frame(width: 20, height: 20)
+            .background(color, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
+/// A count on a filled capsule: the sidebar's picked item, or what asks for you.
+struct FilledBadge: View {
+    let count: Int
+    let color: Color
+
+    var body: some View {
+        Text("\(count)")
+            .font(.system(size: 11, weight: .semibold).monospacedDigit())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .frame(minWidth: 20, minHeight: 18)
+            .background(color, in: Capsule())
+    }
 }
 
 extension Font {
@@ -91,6 +138,9 @@ enum BellLayout {
     static let rowGap: CGFloat = 10
     /// Where a row's text starts: past the inset, the padding, the lamp and the gap.
     static let rowTextLeading: CGFloat = rowInset + rowLeading + 12 + rowGap
+    /// From this list width a row has room for both the question and where it stands:
+    /// the session window, not the 600-wide panel's content pane.
+    static let wideRowWidth: CGFloat = 520
     static let controlFill = Color.primary.opacity(0.065)
     static let cardFill = Color(nsColor: Palette.card)
     static let contentFill = Color(nsColor: Palette.content)

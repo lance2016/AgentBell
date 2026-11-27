@@ -31,9 +31,11 @@ Ghostty（1.4+）、iTerm2 和 macOS「终端」支持新建和精确跳回。Gh
 
 ## 代码审查
 
-在「设置 → 审查」选一次默认仓库，需要时再调整 Review 模板。之后打开「新建会话 → 代码审查」，粘贴整条团队消息，点「开始 Review」即可。完整 MR 链接会自动匹配已有仓库，`!编号` 和分支名优先使用默认仓库。
+在「设置 → 审查」选一次默认仓库，需要时再调整 Review 模板、默认模型和报告的保存位置。之后打开「新建会话 → 代码审查」，粘贴整条团队消息，点「开始审查」（⌘↩）即可。完整 MR 链接会自动匹配已有仓库，`!编号` 和分支名优先使用默认仓库。模型可选「默认（推荐）」、Fable 和 Opus；「默认」跟 Claude Code 里 `/model` 的默认一致。
 
-AgentBell 会检查审查范围，在独立 worktree 里审查，并提供可编辑、可复制的 Markdown。MR 使用已登录的 GitLab CLI（`glab`）读取元数据，代码差异会交给当前 Claude Code 配置的模型。
+AgentBell 会检查审查范围，再让 Claude 在独立 worktree 里后台审查。Claude 能读这份 worktree 里的代码（比如调用方），但不能改文件、跑命令或读 worktree 以外的内容。审查要几分钟，可以关掉窗口，也可以同时发起别的审查。审查结束时，按「设置 › 通知」的开关发系统通知或桌面气泡，点开就是那次审查。
+
+审查窗口左边列出进行中和已完成的审查，右边显示报告。每次审查保存为一个文件夹，里面有 `report.md`，默认放在 `~/Library/Application Support/AgentBell/Review Reports/`，可以在设置里换位置。报告可以复制、在访达中显示、用默认应用打开编辑，也可以删除（支持多选和 ⌫ 键）。想接着追问，点「在终端继续」，会在终端里恢复这次审查的会话。审查用的 worktree 放在 `~/Library/Application Support/AgentBell/Reviews/`，三天后在下次审查同一仓库时清理；清理后报告还在，只是不能再在终端继续。删除审查记录时，它的 worktree 也一起删除。MR 使用已登录的 GitLab CLI（`glab`）读取元数据。
 
 ## 快速开始
 
@@ -55,7 +57,7 @@ scripts/build-app.sh --install
 
 ## 数据留在本机
 
-AgentBell 在本机读取会话列表、对话记录和 Git 状态，hook 事件通过本机 Unix socket 传递。检查更新时会请求 GitHub 的公开发布信息，点「下载并安装」时才下载新版本。主动发起代码审查时，会通过 GitLab 和 Git 读取所选提交，并交由你配置的 Claude Code 模型审查差异。
+AgentBell 在本机读取会话列表、对话记录和 Git 状态，hook 事件通过本机 Unix socket 传递。检查更新时会请求 GitHub 的公开发布信息，点「下载并安装」时才下载新版本。主动发起代码审查时，会通过 GitLab 和 Git 读取所选提交，并交由你配置的 Claude Code 模型审查差异和该提交的代码。
 
 <details>
 <summary>安装、连接与卸载细节</summary>

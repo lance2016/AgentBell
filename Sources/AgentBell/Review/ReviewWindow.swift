@@ -1,188 +1,251 @@
 import AppKit
 import BellCore
+import Observation
 import SwiftUI
+
+/// What the review window shows, kept outside its views so a draft or a selection
+/// survives moving between reviews and closing the window.
+@MainActor
+@Observable
+final class ReviewWindowState {
+    var selection: Set<String> = []
+    var message = ""
+    var focus = ""
+    /// Nil until the user picks one: the default from Settings applies.
+    var model: ReviewModel?
+}
 
 @MainActor
 final class ReviewWindowController {
     private let store: SessionStore
+    private let reviews: ReviewStore
+    private let state = ReviewWindowState()
     private let openSettings: () -> Void
     private lazy var window: NSWindow = {
-        let view = NSHostingController(rootView: ReviewView(store: store, openSettings: openSettings))
-        let window = NSWindow(contentViewController: view)
+        let host = NSHostingController(rootView: ReviewView(
+            store: store, reviews: reviews, state: state, openSettings: openSettings
+        ))
+        // The views' toolbar items go into the window's toolbar.
+        host.sceneBridgingOptions = [.toolbars]
+        let window = NSWindow(contentViewController: host)
         window.title = "代码审查"
-        window.styleMask = [.titled, .closable, .miniaturizable]
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.toolbarStyle = .unified
         window.isReleasedWhenClosed = false
-        window.center()
+        window.contentMinSize = NSSize(width: 700, height: 440)
+        if !window.setFrameUsingName(Self.frameName) {
+            window.setContentSize(NSSize(width: 900, height: 600))
+            window.center()
+        }
+        window.setFrameAutosaveName(Self.frameName)
         return window
     }()
 
-    init(store: SessionStore, openSettings: @escaping () -> Void) {
+    private static let frameName = "AgentBell.Review"
+
+    init(store: SessionStore, reviews: ReviewStore, openSettings: @escaping () -> Void) {
         self.store = store
+        self.reviews = reviews
         self.openSettings = openSettings
+        reviews.onFinish = { [weak self] id, title, body, failed in
+            self?.finished(id: id, title: title, body: body, failed: failed)
+        }
     }
 
-    func show() {
+    /// Opens the window on a review, or on the form for a new one when `id` is nil.
+    func show(selecting id: String?) {
+        reviews.reload()
+        state.selection = id.map { [$0] } ?? []
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Reviews run for minutes: say when one ends, unless the user is looking at it.
+    private func finished(id: String, title: String, body: String, failed: Bool) {
+        guard !(NSApp.isActive && window.isKeyWindow && state.selection == [id]) else { return }
+        store.notifier.postReview(id: id, title: title, body: body, failed: failed)
     }
 }
 
 private struct ReviewView: View {
     let store: SessionStore
+    let reviews: ReviewStore
+    @Bindable var state: ReviewWindowState
     let openSettings: () -> Void
 
-    @AppStorage(ReviewPreference.repository) private var repository = ""
-    @AppStorage(ReviewPreference.baseBranch) private var baseBranch = "main"
-    @AppStorage(ReviewPreference.template) private var template = ReviewRunner.defaultTemplate
-    @AppStorage(ReviewPreference.requireCurrentTarget) private var requireCurrentTarget = true
-    @FocusState private var messageFocused: Bool
-    @ViewState private var message = ""
-    @ViewState private var focus = ""
-    @ViewState private var plan: ReviewPlan?
-    @ViewState private var result = ""
-    @ViewState private var busy: String?
-    @ViewState private var problem: String?
-    @ViewState private var repositoryChoices: [URL]?
-    @ViewState private var copied = false
+    @ViewState private var pendingDeletion: Set<String> = []
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                Section {
-                    TextField("粘贴团队消息、MR 链接、!编号或分支名", text: $message, axis: .vertical)
-                        .lineLimit(2...4)
-                        .focused($messageFocused)
-                    if case .mergeRequest(let project?, _) = try? ReviewRequest.parse(message) {
-                        Text("自动匹配 \(project.path)").foregroundStyle(.secondary)
-                    } else {
-                        Text(repository.isEmpty ? "从已有项目中选择仓库" : "默认仓库 · \(ReviewPreference.displayName(repository))")
-                            .foregroundStyle(.secondary)
-                    }
-                    DisclosureGroup("补充审查关注点") {
-                        TextField("例如：重试是否会重复写入", text: $focus)
-                    }
+        NavigationSplitView {
+            ReviewSidebar(reviews: reviews, selection: $state.selection, store: store,
+                          delete: { pendingDeletion = deletable($0) })
+                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
+        } detail: {
+            detail
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    state.selection = []
+                } label: {
+                    Label("新建审查", systemImage: "square.and.pencil")
                 }
-                .disabled(busy != nil)
+                .help("新建审查（⌘N）")
+                .keyboardShortcut("n")
+            }
+        }
+        .confirmationDialog(
+            pendingDeletion.count > 1 ? "删除 \(pendingDeletion.count) 条审查记录？" : "删除这条审查记录？",
+            isPresented: Binding(get: { !pendingDeletion.isEmpty }, set: { if !$0 { pendingDeletion = [] } })
+        ) {
+            Button("删除", role: .destructive) {
+                reviews.delete(pendingDeletion)
+                state.selection.subtract(pendingDeletion)
+                pendingDeletion = []
+            }
+        } message: {
+            Text("报告文件和审查用的检出代码会一起删除，无法恢复。")
+        }
+        .onAppear { reviews.reload() }
+    }
 
-                if let choices = repositoryChoices {
-                    Section("选择本次审查的仓库") {
-                        ForEach(choices, id: \.path) { directory in
-                            Button((directory.path as NSString).abbreviatingWithTildeInPath) {
-                                start(using: directory)
-                            }
-                        }
-                        Button("选择文件夹…") {
-                            if let path = ReviewPreference.chooseRepository() {
-                                ReviewPreference.remember(path)
-                                start(using: URL(fileURLWithPath: path, isDirectory: true))
-                            }
-                        }
-                    }
-                }
+    @ViewBuilder private var detail: some View {
+        if state.selection.count > 1 {
+            ContentUnavailableView {
+                Label("已选择 \(state.selection.count) 项", systemImage: "doc.on.doc")
+            } actions: {
+                Button("删除…", role: .destructive) { pendingDeletion = deletable(state.selection) }
+                    .disabled(deletable(state.selection).isEmpty)
+            }
+        } else if let id = state.selection.first, let job = reviews.job(id) {
+            JobDetail(job: job, reviews: reviews)
+        } else if let id = state.selection.first, let record = reviews.record(id) {
+            ReportDetail(record: record, archive: reviews.archive, store: store,
+                         delete: { pendingDeletion = [record.id] })
+        } else {
+            NewReviewForm(store: store, reviews: reviews, state: state, openSettings: openSettings)
+        }
+    }
 
-                if let problem {
-                    Text(problem).foregroundStyle(.red).textSelection(.enabled)
-                }
+    /// Running reviews are stopped, not deleted.
+    private func deletable(_ ids: Set<String>) -> Set<String> {
+        ids.filter { reviews.job($0)?.running != true }
+    }
+}
 
-                if let plan {
-                    DisclosureGroup("审查范围 · \(plan.sourceBranch) → \(plan.targetBranch)") {
-                        LabeledContent("源提交", value: String(plan.head.prefix(12)))
-                        LabeledContent("目标提交", value: String(plan.target.prefix(12)))
-                        if plan.behind > 0 {
-                            Text("源分支落后目标分支 \(plan.behind) 个提交。")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
+private struct ReviewSidebar: View {
+    let reviews: ReviewStore
+    @Binding var selection: Set<String>
+    let store: SessionStore
+    let delete: (Set<String>) -> Void
 
-                if !result.isEmpty {
-                    Section("审查结果") {
-                        TextEditor(text: $result)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(minHeight: 180)
-                        Button(copied ? "已复制" : "复制 Markdown") {
-                            NSPasteboard.general.clearContents()
-                            copied = NSPasteboard.general.setString(result, forType: .string)
-                        }
-                    }
+    private var running: [ReviewStore.Job] { reviews.jobs.filter(\.running) }
+    private var failed: [ReviewStore.Job] { reviews.jobs.filter { !$0.running } }
+
+    var body: some View {
+        List(selection: $selection) {
+            if !running.isEmpty {
+                Section("进行中") {
+                    ForEach(running) { JobRow(job: $0).tag($0.id) }
                 }
             }
-            .formStyle(.grouped)
+            if !failed.isEmpty || !reviews.records.isEmpty {
+                Section("已完成") {
+                    ForEach(failed) { JobRow(job: $0).tag($0.id) }
+                    ForEach(reviews.records) { RecordRow(record: $0).tag($0.id) }
+                }
+            }
+        }
+        .overlay {
+            if reviews.jobs.isEmpty && reviews.records.isEmpty {
+                ContentUnavailableView("还没有审查", systemImage: "text.magnifyingglass",
+                                       description: Text("审查完成后，报告会保存在这里。"))
+            }
+        }
+        .contextMenu(forSelectionType: String.self) { ids in
+            menu(for: ids)
+        } primaryAction: { ids in
+            if ids.count == 1, let id = ids.first, let record = reviews.record(id) {
+                ReviewActions.open(record)
+            }
+        }
+        .onDeleteCommand { delete(selection) }
+    }
 
+    @ViewBuilder private func menu(for ids: Set<String>) -> some View {
+        if ids.count == 1, let id = ids.first, let record = reviews.record(id) {
+            Button("用默认应用打开") { ReviewActions.open(record) }
+            Button("在访达中显示") { ReviewActions.reveal(record) }
+            Button("复制报告") { _ = ReviewActions.copy(record, from: reviews.archive) }
+            Button("在终端继续") { ReviewActions.resume(record, store: store) }
+                .disabled(!ReviewActions.canResume(record))
             Divider()
-            HStack {
-                Button("审查设置…", action: openSettings)
-                Spacer()
-                if let busy {
+            Button("删除…", role: .destructive) { delete(ids) }
+        } else if ids.count == 1, let id = ids.first, let job = reviews.job(id) {
+            if job.running {
+                Button("停止审查") { reviews.cancel(id) }
+            } else {
+                Button("重试") { reviews.retry(id) }
+                Button("移除", role: .destructive) { reviews.delete(ids) }
+            }
+        } else if ids.count > 1 {
+            Button("删除 \(ids.count) 项…", role: .destructive) { delete(ids) }
+        }
+    }
+}
+
+private struct JobRow: View {
+    let job: ReviewStore.Job
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Group {
+                if job.running {
                     ProgressView().controlSize(.small)
-                    Text(busy).foregroundStyle(.secondary)
                 } else {
-                    Button("开始 Review") { start() }
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.return, modifiers: .command)
-                        .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
                 }
             }
-            .padding(16)
-        }
-        .frame(width: 540, height: plan == nil && repositoryChoices == nil ? 295 : 520)
-        .onAppear { messageFocused = true }
-        .onChange(of: message) { _, _ in reset() }
-        .onChange(of: result) { _, _ in copied = false }
-    }
-
-    private func reset() {
-        plan = nil
-        result = ""
-        problem = nil
-        repositoryChoices = nil
-    }
-
-    private func start(using selected: URL? = nil) {
-        guard busy == nil else { return }
-        reset()
-        guard case .ready(let executable) = store.claude else {
-            problem = "找不到 Claude Code。请先在 AgentBell 通用设置选择可用的 Claude。"
-            return
-        }
-        do {
-            let request = try ReviewRequest.parse(message)
-            let preferred = repository.isEmpty ? nil : URL(fileURLWithPath: repository, isDirectory: true)
-            let candidates = ReviewPreference.projects(in: store).map { URL(fileURLWithPath: $0, isDirectory: true) }
-            let base = baseBranch
-            let promptTemplate = template
-            let reviewFocus = focus
-            let requireFreshBase = requireCurrentTarget
-            busy = "正在解析仓库和提交…"
-            Task {
-                defer { busy = nil }
-                do {
-                    let choice: ReviewRunner.RepositoryChoice
-                    if let selected {
-                        choice = .use(selected)
-                    } else {
-                        choice = try await ReviewRunner.chooseRepository(for: request, preferred: preferred, candidates: candidates)
-                    }
-                    switch choice {
-                    case .choose(let available):
-                        repositoryChoices = available
-                        problem = available.isEmpty ? "找不到对应的本地仓库，请选择项目文件夹。" : nil
-                    case .use(let directory):
-                        let review = try await ReviewRunner.prepare(request, directory: directory, base: base)
-                        plan = review
-                        if requireFreshBase && review.behind > 0 {
-                            problem = "源分支落后目标分支 \(review.behind) 个提交。请作者更新分支后重试，或在「审查设置」调整此规则。"
-                            return
-                        }
-                        busy = "Claude 正在审查…"
-                        result = try await ReviewRunner.run(review, claude: executable, template: promptTemplate, focus: reviewFocus)
-                    }
-                } catch {
-                    problem = error.localizedDescription
-                }
+            .frame(width: 16)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(job.repositoryName).fontWeight(.medium)
+                Text(job.range ?? job.message).lineLimit(1).foregroundStyle(.secondary)
+                status.font(.caption).foregroundStyle(.secondary)
             }
-        } catch {
-            problem = error.localizedDescription
         }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var status: some View {
+        switch job.stage {
+        case .preparing:
+            Text("准备中 · \(job.model.title)")
+        case .reviewing:
+            TimelineView(.periodic(from: job.startedAt, by: 1)) { context in
+                Text("审查中 \(ReviewActions.elapsed(since: job.startedAt, now: context.date)) · \(job.model.title)")
+            }
+        case .failed:
+            Text("失败").foregroundStyle(.red)
+        }
+    }
+}
+
+private struct RecordRow: View {
+    let record: ReviewRecord
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "doc.text").foregroundStyle(.secondary).frame(width: 16)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(record.repositoryName).fontWeight(.medium)
+                Text(record.range).lineLimit(1).foregroundStyle(.secondary)
+                Text("\(record.finishedAt.formatted(date: .abbreviated, time: .shortened)) · \(record.model.title)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 }

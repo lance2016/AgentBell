@@ -60,7 +60,9 @@ struct ConnectionDiagnostics: View {
                 }
                 Section("终端") {
                     LabeledContent {
-                        if let live = store.liveSessions.max(by: { $0.stateSince < $1.stateSince }) {
+                        if model.outdatedTerminals[TerminalApp.current] != nil, let page = TerminalApp.current.downloadPage {
+                            Link("更新", destination: page)
+                        } else if let live = store.liveSessions.max(by: { $0.stateSince < $1.stateSince }) {
                             Button("测试跳转") { testJump(live) }
                                 .disabled(testingJump)
                         } else if model.automation[TerminalApp.current] == .denied {
@@ -141,6 +143,7 @@ struct ConnectionDiagnostics: View {
     private var terminalStatus: String {
         let app = TerminalApp.current
         guard model.installedTerminals.contains(app) else { return "\(app.title) 未安装，可在通用设置里切换。" }
+        if let version = model.outdatedTerminals[app] { return "\(app.outdatedNote(version))，请先更新。" }
         switch model.automation[app] ?? .targetNotRunning {
         case .allowed: return "\(app.title) 已授权。打开 Claude 会话后可测试跳转。"
         case .denied: return "\(app.title) 未获授权，可在「权限」页处理。"

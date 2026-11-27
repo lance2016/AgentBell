@@ -163,6 +163,30 @@ struct SessionTitleTests {
         #expect(renamed.title == "支付重构")
     }
 
+    /// A review runs with AgentBell's prompt and gets no title of Claude's: what it
+    /// reviews names it, below any name the user gave.
+    @Test func reviewIsNamedAfterWhatItReviews() {
+        let request = "用简体中文审查以下改动。优先检查业务逻辑。"
+        let review = ReviewCheckout(sourceBranch: "feat/x", targetBranch: "main", prompt: request)
+        let summary = TranscriptSummary(lastPrompt: request + " 源分支：feat/x", lastReply: "没有发现问题", modifiedAt: t0)
+        var reviewing = session(name: nil, summary: summary)
+        reviewing.project.review = review
+        #expect(reviewing.title == "审查 feat/x")
+        // AgentBell's own prompt is not the user's question.
+        #expect(Copy.asked(reviewing) == nil)
+        reviewing.transcript?.lastPrompt = "第二条再解释一下"
+        #expect(Copy.asked(reviewing) == "第二条再解释一下")
+        // Claude's title says less than the range; the user's names say more.
+        reviewing.transcript?.title = "Review retry changes"
+        #expect(reviewing.title == "审查 feat/x")
+        reviewing.transcript?.customTitle = "重试审查"
+        #expect(reviewing.title == "重试审查")
+        // A checkout from before review.json cannot say what it reviews.
+        var older = session(name: nil, summary: summary)
+        older.project.review = ReviewCheckout()
+        #expect(older.title == "代码审查")
+    }
+
     @Test func secondLineFollowsState() {
         let summary = TranscriptSummary(title: "重写电机驱动", lastPrompt: "跑一下测试", lastReply: "测试全部通过", modifiedAt: t0)
         #expect(Copy.secondLine(session(name: nil, state: .working, summary: summary)) == "跑一下测试")
@@ -199,6 +223,23 @@ struct SessionTitleTests {
         // Nothing asked beyond the title: the state's word is all there is.
         let untitled = TranscriptSummary(lastPrompt: "跑一下测试", modifiedAt: t0)
         #expect(Copy.summary(session(name: nil, state: .working, summary: untitled)) == .init(text: "在工作", asked: false))
+    }
+
+    @Test func wideRowSaysTheQuestionAndWhereItStands() {
+        let summary = TranscriptSummary(title: "重写电机驱动", lastPrompt: "跑一下测试", lastReply: "测试全部通过", modifiedAt: t0)
+        #expect(Copy.summaryLines(session(name: nil, state: .completed, summary: summary))
+            == [.init(text: "跑一下测试", asked: true), .init(text: "做完：测试全部通过", asked: false)])
+        var waiting = session(name: nil, state: .waiting, summary: summary)
+        waiting.detail = "想改 a.swift，等你点头"
+        #expect(Copy.summaryLines(waiting)
+            == [.init(text: "跑一下测试", asked: true), .init(text: "想改 a.swift，等你点头", asked: false)])
+        // The state's word alone adds nothing to the lamp: the question is the one line.
+        #expect(Copy.summaryLines(session(name: nil, state: .working, summary: summary))
+            == [.init(text: "跑一下测试", asked: true)])
+        // Nothing asked beyond the title: where it stands is the one line.
+        let untitled = TranscriptSummary(lastPrompt: "跑一下测试", lastReply: "测试全部通过", modifiedAt: t0)
+        #expect(Copy.summaryLines(session(name: nil, state: .idle, summary: untitled))
+            == [.init(text: "测试全部通过", asked: false)])
     }
 
     @Test func idleCountsFromLastWrite() {

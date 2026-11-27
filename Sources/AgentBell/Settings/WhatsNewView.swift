@@ -15,12 +15,21 @@ enum ReleaseNotes {
     }
 
     static let items = [
-        Item(symbol: "cursorarrow.click",
-             title: "macOS 26 上点得中桌面小终端",
-             detail: "以前只有一小块能拖，其他地方的点击会穿到桌面上。现在整个小终端都能点、拖和右键。"),
         Item(symbol: "checkmark.bubble",
-             title: "代码审查一键开始",
-             detail: "在「设置 › 审查」选一次默认仓库，之后粘贴团队消息，点「开始 Review」即可。MR 链接会自动匹配已有仓库。"),
+             title: "代码审查在后台跑，还有记录",
+             detail: "开始审查后可以关掉窗口，也能同时审几个。结束时发通知，报告存成 report.md；想追问就点「在终端继续」。"),
+        Item(symbol: "arrow.triangle.branch",
+             title: "每一行都写分支",
+             detail: "会话行写自己的分支和 worktree；代码审查会话有放大镜图标，写「源分支 → 目标分支」。"),
+        Item(symbol: "xmark.circle",
+             title: "关闭会话",
+             detail: "行尾的 ⊗ 或右键菜单可以结束开着的会话。对话保留，之后可以 claude --resume。"),
+        Item(symbol: "folder.fill",
+             title: "项目有颜色",
+             detail: "侧栏每个项目前面一个固定颜色的图标方块；Ghostty 太旧时，设置里会提示更新。"),
+        Item(symbol: "doc.text.magnifyingglass",
+             title: "开发者模式",
+             detail: "在「设置 › 关于」打开后，可以查看和导出这次运行的日志，排查问题时用。"),
     ]
 }
 

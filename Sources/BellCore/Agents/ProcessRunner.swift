@@ -22,13 +22,26 @@ public enum ProcessRunner {
         currentDirectory: URL? = nil,
         inputFile: URL? = nil
     ) async throws -> ProcessOutput {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                continuation.resume(with: Result {
-                    try runBlocking(executable, arguments, environment, timeout, currentDirectory, inputFile)
-                })
+        // Cancelling the calling task stops the child and throws `CancellationError`.
+        let handle = ProcessHandle()
+        let output: ProcessOutput
+        do {
+            output = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    DispatchQueue.global(qos: .utility).async {
+                        continuation.resume(with: Result {
+                            try runBlocking(executable, arguments, environment, timeout, currentDirectory, inputFile, handle)
+                        })
+                    }
+                }
+            } onCancel: {
+                handle.terminate()
             }
+        } catch where Task.isCancelled {
+            throw CancellationError()
         }
+        try Task.checkCancellation()
+        return output
     }
 
     private static func runBlocking(
@@ -37,7 +50,8 @@ public enum ProcessRunner {
         _ environment: [String: String]?,
         _ timeout: TimeInterval,
         _ currentDirectory: URL?,
-        _ inputFile: URL?
+        _ inputFile: URL?,
+        _ handle: ProcessHandle
     ) throws -> ProcessOutput {
         let process = Process()
         process.executableURL = executable
@@ -57,6 +71,7 @@ public enum ProcessRunner {
         } catch {
             throw ProcessRunnerError.launchFailed(error.localizedDescription)
         }
+        handle.attach(process)
 
         let killer = DispatchWorkItem { [process] in
             if process.isRunning { process.terminate() }
@@ -85,6 +100,27 @@ public enum ProcessRunner {
             standardOutput: out,
             standardError: String(decoding: errBox.data, as: UTF8.self)
         )
+    }
+}
+
+/// Lets a cancelled task stop its child, even one that has not started yet.
+private final class ProcessHandle: @unchecked Sendable {
+    private let lock = NSLock()
+    private var process: Process?
+    private var cancelled = false
+
+    func attach(_ process: Process) {
+        lock.withLock {
+            self.process = process
+            if cancelled { process.terminate() }
+        }
+    }
+
+    func terminate() {
+        lock.withLock {
+            cancelled = true
+            if process?.isRunning == true { process?.terminate() }
+        }
     }
 }
 

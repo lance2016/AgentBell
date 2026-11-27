@@ -8,13 +8,12 @@ struct PanelLayoutTests {
     func session(
         _ id: String,
         root: String,
-        branch: String? = "main",
         state: RoundState = .idle,
         started: TimeInterval = 0,
         since: TimeInterval = 0
     ) -> Session {
         Session(
-            id: id, pid: 1, cwd: root, project: ProjectInfo(root: root, branch: branch),
+            id: id, pid: 1, cwd: root, project: ProjectInfo(root: root, branch: "main"),
             name: id, startedAt: t0 + started, state: state, stateSince: t0 + since
         )
     }
@@ -82,18 +81,6 @@ struct PanelLayoutTests {
             session("fresh", root: "/b", started: 50, since: 90),
         ])
         #expect(groups.map(\.name) == ["b", "a"])
-    }
-
-    @Test func sharedBranchGoesOnGroup() {
-        let groups = PanelLayout.groups([session("a", root: "/p"), session("b", root: "/p")])
-        #expect(groups[0].branch == "main")
-        #expect(groups[0].branchPerRow == false)
-    }
-
-    @Test func differentBranchesGoOnRows() {
-        let groups = PanelLayout.groups([session("a", root: "/p"), session("b", root: "/p", branch: "feat")])
-        #expect(groups[0].branch == nil)
-        #expect(groups[0].branchPerRow == true)
     }
 
     @Test func overallStatus() {

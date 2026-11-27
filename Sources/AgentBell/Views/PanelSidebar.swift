@@ -87,7 +87,8 @@ extension PanelView {
 
     private func sidebarAttention(picked: Bool) -> some View {
         let count = state.attentionSessions(store).count
-        return sidebarPage("待处理", symbol: "tray", count: count, picked: picked) {
+        return sidebarPage("待处理", symbol: "tray.fill", tint: .attentionTile, count: count, picked: picked,
+                           asksForYou: true) {
             state.showAttention(true, store)
         }
         .accessibilityValue("\(count) 个待处理会话")
@@ -97,7 +98,8 @@ extension PanelView {
     /// The count is what is not done yet.
     private func sidebarTasks(picked: Bool) -> some View {
         let count = store.tasks.tasks.count { $0.status != .done }
-        return sidebarPage("开发任务", symbol: "chevron.left.forwardslash.chevron.right", count: count, picked: picked) {
+        return sidebarPage("开发任务", symbol: "chevron.left.forwardslash.chevron.right", tint: .tasksTile,
+                           count: count, picked: picked) {
             state.showTasks(true)
         }
         .accessibilityValue("\(count) 个未完成任务")
@@ -105,19 +107,17 @@ extension PanelView {
     }
 
     /// A page above the projects, such as 待处理: picked like a project, with a count.
-    private func sidebarPage(_ title: String, symbol: String, count: Int, picked: Bool,
-                             action: @escaping () -> Void) -> some View {
+    /// A count that asks for you is a red badge, as System Settings marks an update.
+    private func sidebarPage(_ title: String, symbol: String, tint: Color, count: Int, picked: Bool,
+                             asksForYou: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                PanelSymbol(name: symbol)
+                IconTile(symbol: symbol, color: tint)
                 Text(title)
                     .font(.system(size: 13))
                 Spacer(minLength: 0)
                 if count > 0 {
-                    Text("\(count)")
-                        .font(.rowTime)
-                        .foregroundStyle(picked ? Color.bellAccent : .secondary)
-                        .accessibilityHidden(true)
+                    SidebarCount(count: count, picked: picked, asksForYou: asksForYou)
                 }
             }
             .padding(.horizontal, 8)
@@ -135,7 +135,7 @@ extension PanelView {
     func projectPage(_ project: ProjectEntry, now: Date) -> some View {
         VStack(spacing: 10) {
             if !project.live.isEmpty {
-                sessionRows(project.live, now: now, mixedBranches: project.branchPerRow)
+                sessionRows(project.live, now: now)
                     .modifier(SessionGroupSurface())
             }
             if !project.closed.isEmpty {
@@ -168,23 +168,20 @@ private struct ProjectItem: View {
     var body: some View {
         Button(action: onPick) {
             HStack(spacing: 8) {
-                if let lamp {
-                    LampView(kind: lamp).frame(width: 20)
-                } else {
-                    PanelSymbol(name: "folder")
-                }
+                // Who it is on the left, as in System Settings; how it stands at the end.
+                IconTile(symbol: "folder.fill", color: .project(project.id))
+                    .opacity(project.live.isEmpty ? 0.5 : 1)
                 Text(project.name)
                     .font(.system(size: 13))
                     .foregroundStyle(project.live.isEmpty ? .secondary : .primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
+                if let lamp {
+                    LampView(kind: lamp)
+                }
                 if showCount && !project.live.isEmpty {
-                    Text("\(project.live.count)")
-                        .font(.rowTime)
-                        .foregroundStyle(picked ? Color.bellAccent : .secondary)
-                        .frame(minWidth: 26, alignment: .trailing)
-                        .accessibilityHidden(true)
+                    SidebarCount(count: project.live.count, picked: picked)
                 }
             }
             .padding(.horizontal, 8)
@@ -199,6 +196,30 @@ private struct ProjectItem: View {
     }
 }
 
+
+/// A sidebar item's count: plain text, a filled accent badge once picked, or a red one
+/// when it asks for you.
+private struct SidebarCount: View {
+    let count: Int
+    let picked: Bool
+    var asksForYou = false
+
+    var body: some View {
+        Group {
+            if asksForYou {
+                FilledBadge(count: count, color: Color(nsColor: .systemRed))
+            } else if picked {
+                FilledBadge(count: count, color: .bellAccent)
+            } else {
+                Text("\(count)")
+                    .font(.rowTime)
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 20)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
 
 /// The pin sits at the end of the row: always there once pinned, on hover otherwise.
 /// Every project action is also in the context menu. The row draws the hover itself so

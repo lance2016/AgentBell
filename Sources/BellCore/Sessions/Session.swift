@@ -63,12 +63,15 @@ public struct Session: Sendable, Equatable, Identifiable, Codable {
     public var isEnded: Bool { endedAt != nil }
 
     /// A name given in AgentBell, else one given with /rename (from `claude agents` while
-    /// open, from the transcript once closed), else Claude's own title, else the last
-    /// prompt, from the transcript or, before the transcript has it, from the hooks.
+    /// open, from the transcript once closed), else what a review reviews, else Claude's
+    /// own title, else the last prompt, from the transcript or, before the transcript has
+    /// it, from the hooks.
     public var title: String {
         if let alias { return alias }
         if let name, !name.isEmpty, !Self.isGeneratedName(name, cwd: cwd) { return name }
-        if let title = transcript?.customTitle ?? transcript?.title { return title }
+        if let title = transcript?.customTitle { return title }
+        if let review = project.review { return review.title }
+        if let title = transcript?.title { return title }
         return (transcript?.lastPrompt ?? heardTurns.last?.prompt).map(Self.promptTitle) ?? "新会话"
     }
 

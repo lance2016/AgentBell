@@ -94,17 +94,74 @@ struct ReviewTests {
         try executable("""
         #!/bin/sh
         [ "$(git rev-parse HEAD)" = '\(head)' ] && [ "$(cat app.txt)" = review-marker ] || exit 11
+        case " $* " in *" --permission-mode dontAsk "*" --tools Read,Grep,Glob "*" --model opus "*) ;; *) exit 15 ;; esac
         input=$(cat)
         printf '%s' "$input" | grep -q '关注：测试重试' || exit 12
         printf '%s' "$input" | grep -q '^+review-marker' || exit 13
         printf '%s' "$input" | grep -q 'local edits' && exit 14
-        printf '%s' '{"is_error":false,"result":"P1 审查结果"}'
+        printf '%s' "$input" | grep -q ' feature$' || exit 16
+        printf '%s' '{"is_error":false,"result":"P1 审查结果","session_id":"review-session"}'
         """, at: claude)
-        let output = try await ReviewRunner.run(plan, claude: claude, template: "关注：{{focus}}", focus: "测试重试")
-        #expect(output.contains(link) && output.contains(head) && output.contains("P1 审查结果"))
-        #expect(try await command(["worktree", "list", "--porcelain"], in: repo) == original)
+        let reviews = root.appendingPathComponent("reviews")
+        let outcome = try await ReviewRunner.run(
+            plan, claude: claude, template: "关注：{{focus}}", focus: "测试重试", model: .opus, root: reviews
+        )
+        #expect(outcome.report.contains(link) && outcome.report.contains(head) && outcome.report.contains("P1 审查结果"))
+        #expect(outcome.report.contains("- 模型 Opus"))
+        #expect(outcome.sessionID == "review-session")
+        // Kept for `claude --resume`, named after the repository, and only the input is gone.
+        #expect(outcome.checkout.lastPathComponent == "clone")
+        #expect(try await command(["rev-parse", "HEAD"], in: outcome.checkout) == head)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: outcome.checkout.deletingLastPathComponent().path).sorted()
+            == ["clone", "review.json"])
+        // A session resumed there says what it reviews.
+        let resumed = ProjectInfo.lookup(cwd: outcome.checkout.path, reviews: reviews.path)
+        #expect(resumed.review == ReviewCheckout(sourceBranch: plan.sourceBranch, targetBranch: plan.targetBranch,
+                                                 prompt: "关注：测试重试"))
         #expect(try await command(["for-each-ref", "refs/agentbell/review"], in: repo).isEmpty)
         #expect(try String(contentsOf: code, encoding: .utf8) == "local edits\n")
+
+        await ReviewRunner.pruneCheckouts(git, repo, root: reviews)
+        #expect(FileManager.default.fileExists(atPath: outcome.checkout.path))
+        await ReviewRunner.pruneCheckouts(git, repo, root: reviews, now: Date().addingTimeInterval(4 * 24 * 3600))
+        #expect(!FileManager.default.fileExists(atPath: outcome.checkout.deletingLastPathComponent().path))
+        #expect(try await command(["worktree", "list", "--porcelain"], in: repo) == original)
+
+        // Saved reports outlive their checkout and are listed newest first.
+        let archive = ReviewArchive(root: root.appendingPathComponent("reports"))
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let older = try archive.save(ReviewRecord(id: "a", plan: plan, outcome: outcome, model: .opus, focus: "测试重试",
+                                                  startedAt: start, finishedAt: start), report: outcome.report)
+        let newer = try archive.save(ReviewRecord(id: "b", plan: plan, outcome: outcome, model: .fable, focus: "",
+                                                  startedAt: start, finishedAt: start), report: "second")
+        #expect(older.folder != newer.folder)
+        #expect(older.folder.lastPathComponent.hasSuffix("clone feat-retry"))
+        let loaded = archive.load()
+        #expect(loaded.map(\.id).sorted() == ["a", "b"])
+        let first = try #require(loaded.first { $0.id == "a" })
+        #expect(first.folder.resolvingSymlinksInPath() == older.folder.resolvingSymlinksInPath())
+        #expect(first.model == .opus && first.sessionID == "review-session" && first.finishedAt == start)
+        #expect(first.checkout == outcome.checkout.path && first.range == "feat/retry → main")
+        #expect(archive.report(first) == outcome.report)
+        try archive.delete(first)
+        #expect(archive.load().map(\.id) == ["b"])
+    }
+
+    @Test func modelsMatchClaudeCodesChoices() {
+        #expect(ReviewModel.recommended.arguments.isEmpty)
+        #expect(ReviewModel.fable.arguments == ["--model", "fable"])
+        #expect(ReviewModel.opus.arguments == ["--model", "opus"])
+    }
+
+    @Test func cancellingStopsTheChildProcess() async throws {
+        let started = Date()
+        let task = Task {
+            try await ProcessRunner.run(URL(fileURLWithPath: "/bin/sleep"), arguments: ["30"], timeout: 60)
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(Date().timeIntervalSince(started) < 5)
     }
 
     private func executable(_ text: String, at url: URL) throws {

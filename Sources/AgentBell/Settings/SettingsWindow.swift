@@ -12,6 +12,8 @@ final class SettingsModel {
     private(set) var launchAtLogin = false
     private(set) var launchNeedsApproval = false
     private(set) var installedTerminals: Set<TerminalApp> = []
+    /// Installed but too old for AgentBell's scripts, with the version found.
+    private(set) var outdatedTerminals: [TerminalApp: String] = [:]
     private(set) var automation: [TerminalApp: AutomationPermission] = [:]
     private(set) var accessibilityAllowed = false
 
@@ -22,6 +24,9 @@ final class SettingsModel {
         launchAtLogin = status == .enabled || status == .requiresApproval
         launchNeedsApproval = status == .requiresApproval
         installedTerminals = Set(TerminalApp.allCases.filter(\.isInstalled))
+        outdatedTerminals = Dictionary(uniqueKeysWithValues: installedTerminals.compactMap { app in
+            app.outdatedVersion.map { (app, $0) }
+        })
         automation = Dictionary(uniqueKeysWithValues: installedTerminals.map { ($0, AutomationPermission.of($0)) })
         accessibilityAllowed = TerminalHighlight.isAllowed
     }
@@ -122,7 +127,7 @@ private struct SettingsPage: View {
             case .notifications: NotificationSettings()
             case .permissions: PermissionSettings(model: model, store: store)
             case .review: ReviewSettings(store: store)
-            case .about: AboutSettings(updates: store.updates)
+            case .about: AboutSettings(model: model, store: store)
             }
         }
         .formStyle(.grouped)
@@ -250,7 +255,7 @@ struct GeneralSettings: View {
             LabeledContent {
                 Picker("新会话在哪里打开", selection: Binding(get: { terminal }, set: { storedTerminal = $0.rawValue })) {
                     ForEach(TerminalApp.allCases) { app in
-                        Text(model.installedTerminals.contains(app) ? app.title : "\(app.title)（未安装）").tag(app)
+                        Text(pickerTitle(app)).tag(app)
                     }
                 }
                 .labelsHidden()
@@ -261,7 +266,14 @@ struct GeneralSettings: View {
                      ? "回到终端时，能定位到会话所在的窗口和标签页"
                      : "回到终端时，能定位到会话所在的标签页和分屏")
             }
-            if let app = suggestedDownload, let page = app.downloadPage {
+            if let version = model.outdatedTerminals[terminal], let page = terminal.downloadPage {
+                LabeledContent {
+                    Link("更新", destination: page)
+                } label: {
+                    Text(terminal.outdatedNote(version))
+                    Text("更新前，新会话打不开，跳回时也找不到具体分屏")
+                }
+            } else if let app = suggestedDownload, let page = app.downloadPage {
                 LabeledContent {
                     Link("下载", destination: page)
                 } label: {
@@ -275,6 +287,11 @@ struct GeneralSettings: View {
                 }
             }
         }
+    }
+
+    private func pickerTitle(_ app: TerminalApp) -> String {
+        if !model.installedTerminals.contains(app) { return "\(app.title)（未安装）" }
+        return model.outdatedTerminals[app] == nil ? app.title : "\(app.title)（需更新）"
     }
 
     /// The picked terminal when it is missing, else Ghostty when it is.
@@ -479,9 +496,14 @@ struct PermissionSettings: View {
 }
 
 struct AboutSettings: View {
-    let updates: UpdateChecker
+    let model: SettingsModel
+    let store: SessionStore
 
+    @AppStorage(DeveloperLogs.modeKey) private var developerMode = false
     @ViewState private var showsNotes = false
+    @ViewState private var showsLogs = false
+
+    private var updates: UpdateChecker { store.updates }
 
     private var version: String {
         let info = Bundle.main.infoDictionary
@@ -527,8 +549,26 @@ struct AboutSettings: View {
                     .buttonStyle(.link)
                 }
             }
+            Section("开发者") {
+                Toggle(isOn: $developerMode) {
+                    Text("开发者模式")
+                    Text("查看和导出运行日志，排查问题时用")
+                }
+                if developerMode {
+                    LabeledContent {
+                        HStack(spacing: 8) {
+                            Button("查看…") { showsLogs = true }
+                            Button("导出…") { Task { await DeveloperLogs.export(model: model, store: store) } }
+                        }
+                    } label: {
+                        Text("运行日志")
+                        Text("本次启动以来的事件和错误，不含提问、回复和文件名")
+                    }
+                }
+            }
         }
         .sheet(isPresented: $showsNotes) { WhatsNewView() }
+        .sheet(isPresented: $showsLogs) { DeveloperLogsView(model: model, store: store) }
     }
 
     @ViewBuilder private var updateStatus: some View {

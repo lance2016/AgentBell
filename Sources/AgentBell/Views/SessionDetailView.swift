@@ -16,6 +16,8 @@ struct SessionDetailView: View {
     let onActivate: () -> Void
     let onCopy: () -> Void
     let onReveal: () -> Void
+    /// Nil once the session has ended: there is no process left to close.
+    let onClose: (() -> Void)?
     /// The title is open for editing, from the pencil beside it.
     @Binding var renaming: Bool
     let onRename: (String) throws -> Void
@@ -226,6 +228,10 @@ struct SessionDetailView: View {
             Button("复制目录路径") { copy(session.cwd, note: "已复制目录路径") }
             Divider()
             Button("在访达中显示", systemImage: "folder", action: onReveal)
+            if let onClose {
+                Divider()
+                Button("关闭会话…", systemImage: "xmark.circle", role: .destructive, action: onClose)
+            }
         } label: {
             Image(systemName: "ellipsis")
         }
@@ -410,6 +416,7 @@ struct SessionDetailView: View {
 
     /// A linked worktree, or the repository's own checkout; nil outside a repository.
     private var checkoutLabel: String? {
+        if session.project.review != nil { return "代码审查检出" }
         if session.project.worktree != nil { return "worktree" }
         return session.project.branch == nil ? nil : "主仓库"
     }
@@ -526,7 +533,10 @@ struct SessionDetailView: View {
                     .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
                     .help(session.cwd)
                 Spacer()
-                if case .loaded(let snapshot) = git {
+                if let range = session.project.review?.range {
+                    BranchTag(branch: range)
+                        .frame(maxWidth: 200, alignment: .trailing)
+                } else if case .loaded(let snapshot) = git {
                     BranchTag(branch: snapshot.branch ?? "游离 HEAD")
                         .frame(maxWidth: 130, alignment: .trailing)
                 }
@@ -630,6 +640,11 @@ struct SessionDetailView: View {
 
     @ViewBuilder private var gitRows: some View {
         CardDivider(leading: 14)
+        // The checkout's own branch is a detached commit; what it compares is the point.
+        if let range = session.project.review?.range {
+            infoRow("审查") { Text(range).truncationMode(.middle) }
+            CardDivider(leading: 14)
+        }
         switch git {
         case .loading:
             infoRow("分支") { Text(session.project.branch ?? "正在读取…") }
