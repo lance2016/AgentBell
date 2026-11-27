@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         installMainMenu()
         let settings = SettingsWindowController(store: store)
-        let review = ReviewWindowController(store: store)
+        let review = ReviewWindowController(store: store, openSettings: { settings.showReview() })
         let panel = PanelController(store: store, presentation: .popover)
         let window = PanelController(store: store, presentation: .window)
         panel.openSettings = { settings.show() }

@@ -17,7 +17,7 @@ enum ReleaseNotes {
     static let items = [
         Item(symbol: "checkmark.bubble",
              title: "代码审查",
-             detail: "「新建会话 → 代码审查」里粘贴团队消息或 GitLab MR 链接，核对分支和提交后在独立 worktree 里审查，完成后复制 Markdown。"),
+             detail: "「新建会话 → 代码审查」里粘贴团队消息或 GitLab MR 链接，点一次开始，在独立 worktree 审查并复制 Markdown。默认仓库和模板在「设置 › 审查」配置。"),
         Item(symbol: "arrow.uturn.forward",
              title: "继续工作与连接诊断",
              detail: "任务关联的会话关掉后，点「继续工作」在原目录恢复；收不到提醒时，「设置 › 通用 › 连接诊断」帮你找原因。"),
