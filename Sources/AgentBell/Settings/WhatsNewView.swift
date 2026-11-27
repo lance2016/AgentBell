@@ -15,15 +15,15 @@ enum ReleaseNotes {
     }
 
     static let items = [
-        Item(symbol: "text.magnifyingglass",
-             title: "代码审查进侧栏",
-             detail: "侧栏的「代码审查」列出进行中和已完成的审查，点一条就打开；在这一页点「新建审查」发起。"),
-        Item(symbol: "folder.badge.gearshape",
-             title: "发起审查前看得到仓库",
-             detail: "表单里的「仓库」写出自动匹配到的本地仓库，匹配不到时先选一个；项目右键也能「新建审查」。"),
-        Item(symbol: "xmark.circle",
-             title: "原生安装也能关闭会话",
-             detail: "用官方安装脚本装的 Claude Code，以前点「关闭」会提示找不到进程，现在能正常关闭。"),
+        Item(symbol: "calendar",
+             title: "周报",
+             detail: "侧栏「周报」里选本周或上周、勾选项目，AgentBell 整理这段时间的会话，交给 Claude 按模板写成周报。"),
+        Item(symbol: "pencil",
+             title: "周报能直接改",
+             detail: "在周报窗口切到「编辑」就能改，边改边保存；也能「在终端继续」让 Claude 改。"),
+        Item(symbol: "arrow.up.left.and.arrow.down.right",
+             title: "跳转后铺满屏幕",
+             detail: "在「设置 › 通用」打开后，跳回或新建会话时，终端窗口没铺满就铺满当前屏幕。"),
     ]
 }
 
