@@ -28,7 +28,7 @@ public enum PanelLayout {
     /// working sessions, and the rest. Waiting rows are oldest first. Other rows and
     /// projects use recent activity, so tool calls never move busy rows under the cursor.
     public static func groups(_ sessions: [Session], pinned: [String] = []) -> [SessionGroup] {
-        let byRoot = Dictionary(grouping: sessions, by: \.project.root)
+        let byRoot = Dictionary(grouping: listed(sessions), by: \.project.root)
         let groups = byRoot.map { root, members -> SessionGroup in
             let sorted = members.sorted(by: rowOrder)
             return SessionGroup(id: root, name: sorted[0].project.name, sessions: sorted)
@@ -36,9 +36,16 @@ public enum PanelLayout {
         return pinnedFirst(groups.sorted(by: groupOrder), pinned: pinned)
     }
 
+    /// The sessions the project lists show. A weekly report's session is read from the
+    /// 周报 page, so it is no project of its own; 待处理 and notifications still see it.
+    public static func listed(_ sessions: [Session]) -> [Session] {
+        sessions.filter { $0.project.weekly == nil }
+    }
+
     /// Every project with an open session, in `groups` order, then those with only
     /// closed sessions, the most recently closed first.
     public static func projects(live: [Session], recent: [Session], pinned: [String] = []) -> [ProjectEntry] {
+        let recent = listed(recent)
         let closedByRoot = Dictionary(grouping: recent, by: \.project.root)
         let open = groups(live).map { group in
             ProjectEntry(

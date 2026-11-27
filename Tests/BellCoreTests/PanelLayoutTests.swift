@@ -18,6 +18,17 @@ struct PanelLayoutTests {
         )
     }
 
+    /// Weekly report sessions live on the 周报 page, not as a project of their own.
+    @Test func reportSessionsAreNoProject() {
+        var report = session("report", root: "/support/周报")
+        report.project.weekly = WeeklyCheckout(days: "11月23日 – 11月29日")
+        var closedReport = report
+        closedReport.endedAt = t0 + 10
+        #expect(PanelLayout.groups([session("a", root: "/a"), report]).map(\.id) == ["/a"])
+        #expect(PanelLayout.projects(live: [report], recent: [closedReport]).isEmpty)
+        #expect(PanelLayout.listed([closedReport, session("b", root: "/b")]).map(\.id) == ["b"])
+    }
+
     @Test func sidebarListsLiveProjectsThenOnesWithOnlyClosedSessions() {
         var closedA = session("closedA", root: "/a")
         closedA.endedAt = t0 + 50
