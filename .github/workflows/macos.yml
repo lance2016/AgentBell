@@ -1,0 +1,42 @@
+name: macOS
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            toolchain: Xcode 16.1
+            developer_dir: /Applications/Xcode_16.1.app/Contents/Developer
+          - runner: macos-latest
+            toolchain: Runner default
+            developer_dir: ""
+    name: ${{ matrix.toolchain }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select toolchain and run tests
+        env:
+          AGENTBELL_DEVELOPER_DIR: ${{ matrix.developer_dir }}
+        run: |
+          if [ -n "$AGENTBELL_DEVELOPER_DIR" ]; then
+            printf 'DEVELOPER_DIR=%s\n' "$AGENTBELL_DEVELOPER_DIR" >> "$GITHUB_ENV"
+            export DEVELOPER_DIR="$AGENTBELL_DEVELOPER_DIR"
+          fi
+          sw_vers
+          swift --version
+          swift test
+      - name: Build and verify app bundle
+        run: |
+          bash scripts/build-app.sh --no-launch
+          plutil -lint build/AgentBell.app/Contents/Info.plist
+          codesign --verify --strict build/AgentBell.app/Contents/MacOS/agent-bell-hook
+          codesign --verify --strict build/AgentBell.app
