@@ -10,6 +10,8 @@ struct SessionRowView: View {
     let rowBranch: String?
     let showProject: Bool
     let compact: Bool
+    /// Another open session works in the same directory.
+    let sharesDirectory: Bool
     let selected: Bool
     let feedback: String?
     let statusPending: Bool
@@ -40,6 +42,14 @@ struct SessionRowView: View {
                                 .foregroundStyle(session.isEnded ? .secondary : .primary)
                                 .lineLimit(1)
                             Spacer(minLength: 4)
+                            if sharesDirectory {
+                                Text("同目录")
+                                    .font(.rowDetail)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .fixedSize()
+                                    .help("另一个会话也在这个目录里工作，改动可能互相覆盖。分开做可以从「新建会话」选别的 worktree")
+                            }
                             if showProject {
                                 Text(session.project.name)
                                     .font(.rowDetail)
@@ -70,7 +80,7 @@ struct SessionRowView: View {
             .accessibilityLabel(Copy.accessibilityLabel(session, now: now))
             .accessibilityAddTraits(selected ? .isSelected : [])
             .accessibilityHint(primaryTitle)
-            .accessibilityValue(statusPending ? "会话状态待确认" : "")
+            .accessibilityValue(statusPending ? "会话状态待确认" : sharesDirectory ? "和另一个会话在同一目录" : "")
             .accessibilityAction(named: "查看详情", onDetail)
             .accessibilityAction(named: "复制恢复命令", onCopy)
             .accessibilityAction(named: "在访达中显示", onReveal)

@@ -50,6 +50,11 @@ public enum Notices {
         public var post: [Notice] = []
         /// Ids of notifications no longer true, such as a question already answered.
         public var withdraw: [String] = []
+
+        public init(post: [Notice] = [], withdraw: [String] = []) {
+            self.post = post
+            self.withdraw = withdraw
+        }
     }
 
     public static func changes(from old: [String: Session], to new: [String: Session], prefs: NoticePrefs) -> Changes {

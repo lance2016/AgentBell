@@ -40,6 +40,10 @@ final class Notifier: NSObject {
     /// The sessions as last seen. Nil until the first poll, which only sets the baseline:
     /// a restart must not announce everything that was already so.
     @ObservationIgnored private var previous: [String: Session]?
+    /// Notices waiting on the check whether their terminal is in view, by id, with the
+    /// check each belongs to.
+    @ObservationIgnored private var checking: [String: Int] = [:]
+    @ObservationIgnored private var checkCount = 0
     @ObservationIgnored private let log = Logger(subsystem: "com.agentbell.AgentBell", category: "notify")
 
     private var center: UNUserNotificationCenter { .current() }
@@ -61,14 +65,29 @@ final class Notifier: NSObject {
         }
         self.previous = live
         let changes = Notices.changes(from: previous, to: live, prefs: Self.prefs)
-        onChanges?(changes)
-        // Taken back even with system notifications off: some may be from before.
         if !changes.withdraw.isEmpty {
+            for id in changes.withdraw { checking[id] = nil }
+            onChanges?(Notices.Changes(withdraw: changes.withdraw))
+            // Taken back even with system notifications off: some may be from before.
             center.removeDeliveredNotifications(withIdentifiers: changes.withdraw)
         }
-        guard Self.isOn(Key.system) else { return }
-        for notice in changes.post {
-            post(notice)
+        guard !changes.post.isEmpty else { return }
+        checkCount += 1
+        let check = checkCount
+        for notice in changes.post { checking[notice.id] = check }
+        let sessions = changes.post.compactMap { live[$0.session] }
+        Task {
+            let watched = await TerminalJumper.watched(sessions)
+            // Dropped meanwhile: taken back, or replaced by a newer notice.
+            let post = changes.post.filter { checking[$0.id] == check && !watched.contains($0.session) }
+            for notice in changes.post where checking[notice.id] == check { checking[notice.id] = nil }
+            if !watched.isEmpty { log.notice("held back \(changes.post.count - post.count) for a watched terminal") }
+            guard !post.isEmpty else { return }
+            onChanges?(Notices.Changes(post: post))
+            guard Self.isOn(Key.system) else { return }
+            for notice in post {
+                self.post(notice)
+            }
         }
     }
 

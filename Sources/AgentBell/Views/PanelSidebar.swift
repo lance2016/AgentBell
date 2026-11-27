@@ -38,8 +38,7 @@ extension PanelView {
                                           toggle: { store.toggleProjectPin(project.id) },
                                           newSession: { actions.launchInProject(project.id) },
                                           reveal: { actions.revealProject(project.id) }) { hovering in
-                                ProjectItem(project: project, picked: isPicked,
-                                            pinned: pinned, showCount: !hovering) {
+                                ProjectItem(project: project, picked: isPicked, showCount: !hovering) {
                                     state.pick(project: project.id, store)
                                 }
                             }
@@ -187,7 +186,6 @@ extension PanelView {
 private struct ProjectItem: View {
     let project: ProjectEntry
     let picked: Bool
-    let pinned: Bool
     let showCount: Bool
     let onPick: () -> Void
 
@@ -207,7 +205,7 @@ private struct ProjectItem: View {
                 if let lamp {
                     LampView(kind: lamp).frame(width: 20)
                 } else {
-                    PanelSymbol(name: pinned ? "pin.fill" : "folder")
+                    PanelSymbol(name: "folder")
                 }
                 Text(project.name)
                     .font(.system(size: 13))
@@ -236,8 +234,9 @@ private struct ProjectItem: View {
 }
 
 
-/// The pin replaces the count on hover; every project action is in the context menu.
-/// The row draws the hover itself so the fill runs under the pin too.
+/// The pin sits at the end of the row: always there once pinned, on hover otherwise.
+/// Every project action is also in the context menu. The row draws the hover itself so
+/// the fill runs under the pin too.
 struct ProjectPinRow<Content: View>: View {
     let name: String
     let pinned: Bool
@@ -254,7 +253,7 @@ struct ProjectPinRow<Content: View>: View {
     var body: some View {
         HStack(spacing: 0) {
             content(hovering)
-            if hovering {
+            if hovering || pinned {
                 Button(action: toggle) {
                     Image(systemName: symbol)
                         .font(.system(size: 12))

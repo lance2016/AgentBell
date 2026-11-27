@@ -207,6 +207,11 @@ struct GeneralSettings: View {
                 }
                 .disabled(menuBarIcon && !desktopIcon)
             }
+            Section("快捷键") {
+                ForEach(Shortcut.allCases) { shortcut in
+                    ShortcutRow(shortcut: shortcut, hotKeys: .shared)
+                }
+            }
             Section {
                 Toggle(isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) })) {
                     Text("开机时启动")

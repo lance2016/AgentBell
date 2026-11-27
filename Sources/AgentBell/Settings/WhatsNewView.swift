@@ -11,21 +11,18 @@ enum ReleaseNotes {
     }
 
     static let items = [
-        Item(symbol: "rectangle.stack",
-             title: "所有会话，一屏看全",
-             detail: "Claude Code 会话按项目归在一起，谁在跑、谁在等你，一眼就知道。"),
-        Item(symbol: "arrow.uturn.backward",
-             title: "一键回到现场",
-             detail: "点一下就跳回会话所在的终端窗口，支持 Ghostty、iTerm2 和「终端」。"),
-        Item(symbol: "bell.badge",
-             title: "该你出手时提醒你",
-             detail: "等你确认、出错或长任务完成时，用通知或桌面气泡告诉你。"),
-        Item(symbol: "face.smiling",
-             title: "桌面小终端",
-             detail: "灯光和表情实时显示状态，大小可以在「设置 › 桌面」调整。"),
-        Item(symbol: "checklist",
-             title: "开发任务",
-             detail: "记下每件事做到哪、下一步做什么，回来就能接着干。"),
+        Item(symbol: "keyboard",
+             title: "全局快捷键",
+             detail: "在任何地方按 ⌃⌥⌘J 回到等你最久的会话，⌃⌥⌘B 打开面板。可以在「设置 › 通用」里改。"),
+        Item(symbol: "bell.slash",
+             title: "正看着就不打扰",
+             detail: "会话停下来时，你正盯着它所在的终端，就不再弹通知和气泡。"),
+        Item(symbol: "square.on.square",
+             title: "同目录提醒",
+             detail: "两个会话在同一个目录里工作时，会话行会标出「同目录」，免得改动互相覆盖。"),
+        Item(symbol: "wrench.and.screwdriver",
+             title: "细节修正",
+             detail: "跳回「终端」时的高亮框不再超出窗口；置顶项目左边保留文件夹，图钉移到行尾。"),
     ]
 }
 

@@ -71,6 +71,25 @@ public enum TerminalApp: String, CaseIterable, Identifiable, Sendable {
         case .terminal: AppleTerminalScript.focus
         }
     }
+
+    /// No arguments; answers the device of the terminal in front, or nothing. Only run
+    /// while the app is in front, so the reference to the front window is the one shown.
+    public var focusedTTYScript: String {
+        let reference = switch self {
+        case .ghostty: "tty of focused terminal of selected tab of front window"
+        case .iTerm: "tty of current session of current window"
+        case .terminal: "tty of selected tab of front window"
+        }
+        return """
+        tell application id "\(bundleID)"
+          try
+            return \(reference)
+          on error
+            return ""
+          end try
+        end tell
+        """
+    }
 }
 
 /// iTerm2: a new tab in the front window, or a window of its own; a session found by

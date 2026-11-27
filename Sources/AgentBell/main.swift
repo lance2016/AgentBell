@@ -1,4 +1,5 @@
 import AppKit
+import BellCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -45,10 +46,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.statusItem = statusItem
         self.desktop = desktop
         applyEntries()
+        GlobalHotKeys.shared.onPress = { [weak self] in self?.perform($0) }
+        GlobalHotKeys.shared.apply()
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.applyEntries() }
+            MainActor.assumeIsolated {
+                self?.applyEntries()
+                GlobalHotKeys.shared.apply()
+            }
         }
         store.start()
         Task { await store.updates.check() }
@@ -91,6 +97,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         desktop?.applySize(Entry.desktopSize)
         desktop?.setVisible(desktopOn)
         desktop?.bubbles.enabled = Notifier.isOn(Notifier.Key.bubble)
+    }
+
+    /// The global shortcuts. The menu bar panel, or the window when the icon is off, as
+    /// a notification opens.
+    private func perform(_ shortcut: Shortcut) {
+        guard let target = Entry.menuBar ? panel : window else { return }
+        switch shortcut {
+        case .openPanel:
+            target.toggleUnprompted()
+        case .jumpToWaiting:
+            if let session = PanelLayout.nextAttention(store.liveSessions) {
+                target.open(sessionID: session.id)
+            } else {
+                target.showUnprompted()
+            }
+        }
     }
 
     /// A click on the Dock icon, or opening the app again from Finder.

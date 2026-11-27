@@ -516,7 +516,7 @@ struct PanelView: View {
                                   reveal: { actions.revealProject(group.id) }) { hovering in
                         let heading = projectHeading(group.name, branch: group.branch,
                                                      count: hovering ? nil : group.sessions.count,
-                                                     pinned: pinned, expanded: state.searchVisible ? nil : expanded)
+                                                     expanded: state.searchVisible ? nil : expanded)
                         if state.searchVisible {
                             heading
                         } else {
@@ -556,9 +556,9 @@ struct PanelView: View {
         .frame(maxWidth: .infinity, minHeight: 128)
     }
 
-    private func projectHeading(_ name: String, branch: String?, count: Int?, pinned: Bool, expanded: Bool?) -> some View {
+    private func projectHeading(_ name: String, branch: String?, count: Int?, expanded: Bool?) -> some View {
         HStack(spacing: 8) {
-            PanelSymbol(name: pinned ? "pin.fill" : "folder")
+            PanelSymbol(name: "folder")
             Text(name).font(.groupName).lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 4)
             if let branch {
@@ -618,13 +618,14 @@ struct PanelView: View {
 
     func sessionRows(_ sessions: [Session], now: Date, mixedBranches: Bool = false,
                      compact: Bool = false, showProject: Bool = false) -> some View {
-        LazyVStack(spacing: 0) {
+        let sharing = PanelLayout.sharingDirectory(store.liveSessions)
+        return LazyVStack(spacing: 0) {
             ForEach(sessions) { session in
                 if session.id != sessions.first?.id {
                     CardDivider(leading: BellLayout.rowTextLeading)
                 }
                 row(session, now: now, rowBranch: mixedBranches ? session.project.branch : nil,
-                    compact: compact, showProject: showProject)
+                    compact: compact, showProject: showProject, sharesDirectory: sharing.contains(session.id))
             }
         }
         .padding(.vertical, BellLayout.rowInset)
@@ -633,13 +634,14 @@ struct PanelView: View {
     }
 
     private func row(_ session: Session, now: Date, rowBranch: String?, compact: Bool,
-                     showProject: Bool) -> some View {
+                     showProject: Bool, sharesDirectory: Bool) -> some View {
         SessionRowView(
             session: session,
             now: now,
             rowBranch: rowBranch,
             showProject: showProject,
             compact: compact,
+            sharesDirectory: sharesDirectory,
             selected: state.selectionShown && state.selectedID == session.id,
             feedback: state.feedbackText(for: session.id),
             statusPending: store.tracker.isPendingClosure(session.id),

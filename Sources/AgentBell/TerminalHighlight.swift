@@ -118,14 +118,33 @@ enum TerminalHighlight {
         let app = AXUIElementCreateApplication(pid)
         guard let focused: AXUIElement = attribute(app, kAXFocusedUIElementAttribute),
               let role: String = attribute(focused, kAXRoleAttribute), role == terminalRole,
-              let position: AXValue = attribute(focused, kAXPositionAttribute),
-              let size: AXValue = attribute(focused, kAXSizeAttribute)
+              var visible = frame(of: focused)
+        else { return nil }
+        // Terminal.app's text area holds the whole scrollback and runs far above the
+        // window; what shows is the part inside its scroll area and window.
+        var element = focused
+        for _ in 0..<maxAncestors {
+            guard let parent: AXUIElement = attribute(element, kAXParentAttribute),
+                  let parentRole: String = attribute(parent, kAXRoleAttribute),
+                  parentRole != kAXApplicationRole
+            else { break }
+            if let outer = frame(of: parent) { visible = visible.intersection(outer) }
+            element = parent
+        }
+        guard !visible.isNull, visible.width >= minSide, visible.height >= minSide else { return nil }
+        return visible
+    }
+
+    /// A real chain is a scroll area, a split or two and the window.
+    private static let maxAncestors = 12
+
+    private static func frame(of element: AXUIElement) -> CGRect? {
+        guard let position: AXValue = attribute(element, kAXPositionAttribute),
+              let size: AXValue = attribute(element, kAXSizeAttribute)
         else { return nil }
         var origin = CGPoint.zero
         var extent = CGSize.zero
-        guard AXValueGetValue(position, .cgPoint, &origin), AXValueGetValue(size, .cgSize, &extent),
-              extent.width >= minSide, extent.height >= minSide
-        else { return nil }
+        guard AXValueGetValue(position, .cgPoint, &origin), AXValueGetValue(size, .cgSize, &extent) else { return nil }
         return CGRect(origin: origin, size: extent)
     }
 

@@ -107,6 +107,31 @@ struct PanelLayoutTests {
         ]) == .waiting(count: 2))
         #expect(PanelLayout.overallStatus([session("a", root: "/p", state: .failed)]) == .failed)
     }
+
+    @Test func nextAttentionIsLongestWaitingThenFailure() {
+        #expect(PanelLayout.nextAttention([session("idle", root: "/p")]) == nil)
+        let failed = session("failed", root: "/p", state: .failed, since: 1)
+        #expect(PanelLayout.nextAttention([failed, session("work", root: "/p", state: .working)])?.id == "failed")
+        let picked = PanelLayout.nextAttention([
+            failed,
+            session("newer", root: "/a", state: .waiting, since: 30),
+            session("older", root: "/b", state: .waiting, since: 10),
+        ])
+        #expect(picked?.id == "older")
+    }
+
+    @Test func sessionsInOneDirectoryAreFlagged() {
+        var ended = session("ended", root: "/c")
+        ended.endedAt = t0
+        let shared = PanelLayout.sharingDirectory([
+            session("a1", root: "/a"),
+            session("a2", root: "/a/"),
+            session("b", root: "/b"),
+            session("c", root: "/c"),
+            ended,
+        ])
+        #expect(shared == ["a1", "a2"])
+    }
 }
 
 struct CopyTests {

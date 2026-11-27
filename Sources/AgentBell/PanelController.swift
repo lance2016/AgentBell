@@ -207,8 +207,16 @@ final class PanelController {
         if presentation == .popover { hide() }
     }
 
+    /// The open-panel shortcut: shows it, or puts it away when it is already in front.
+    func toggleUnprompted() {
+        switch presentation {
+        case .window: toggleFromIcon()
+        case .popover: isShown ? hide() : showUnprompted()
+        }
+    }
+
     /// Opened by something other than a click on the status item.
-    private func showUnprompted() {
+    func showUnprompted() {
         switch presentation {
         case .window: show()
         case .popover: if let defaultAnchor { show(anchor: defaultAnchor) }

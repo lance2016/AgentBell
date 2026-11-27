@@ -127,6 +127,28 @@ enum TerminalJumper {
         return .appOnly(hostPID)
     }
 
+    /// Sessions the user is looking at right now: in front, the terminal they run in has
+    /// focus, and the user touched the keyboard or pointer lately. Only terminals AgentBell
+    /// may already script count; it never asks for permission here.
+    static func watched(_ sessions: [Session]) async -> Set<String> {
+        let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+        guard idle < watchingWithin,
+              let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+              let terminal = TerminalApp(bundleID: front),
+              AutomationPermission.of(terminal) == .allowed,
+              let output = try? await ProcessRunner.run(
+                  URL(fileURLWithPath: "/usr/bin/osascript"), arguments: ["-e", terminal.focusedTTYScript], timeout: 2
+              ),
+              output.exitCode == 0
+        else { return [] }
+        let tty = String(decoding: output.standardOutput, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard TerminalLocator.isTTYPath(tty) else { return [] }
+        return Set(sessions.filter { ProcessInspector.ttyPath(of: $0.pid) == tty }.map(\.id))
+    }
+
+    /// Longer without input than this, and the user may have walked away from the screen.
+    private static let watchingWithin: TimeInterval = 30
+
     static func openTerminalApp(pid: pid_t) -> Bool {
         guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { return false }
         NSApp.yieldActivation(to: app)
