@@ -8,6 +8,7 @@ struct PanelActions {
     let revealProject: (String) -> Void
     let launchInProject: (String) -> Void
     let launchInFolder: () -> Void
+    let openReview: () -> Void
     let chooseClaude: () -> Void
     let refreshSessions: () -> Void
     let openTerminalApp: (Session) -> Void
@@ -65,7 +66,10 @@ struct PanelView: View {
         .onChange(of: style) { _, style in state.preserveSelection(afterSwitchTo: style, store) }
         .onChange(of: state.searchVisible) { _, visible in searchFocused = visible }
         .onChange(of: state.searchFocusRequest) { _, _ in searchFocused = true }
-        .onChange(of: state.detailID) { _, id in searchFocused = id == nil && state.searchVisible }
+        .onChange(of: state.detailID) { _, id in
+            searchFocused = id == nil && state.searchVisible
+            if state.renamingID != id { state.renamingID = nil }
+        }
     }
 
     /// One column: the app's name and search on top, or the way back from a detail. In
@@ -105,6 +109,10 @@ struct PanelView: View {
                 pageTitle("待处理")
             } else if let project = state.pickedEntry(store) {
                 projectTitle(project.name)
+                // One branch for the whole project goes here; mixed ones are on each row.
+                if !project.branchPerRow, let branch = project.branch {
+                    BranchTag(branch: branch).layoutPriority(-1)
+                }
                 if let caption = Copy.header(project.live) {
                     Text(caption)
                         .font(.rowDetail)
@@ -190,6 +198,8 @@ struct PanelView: View {
                 Section("最近项目") { launchProjectButtons(Array(recent.prefix(8))) }
             }
             Button("选择文件夹…", systemImage: "folder", action: actions.launchInFolder)
+            Divider()
+            Button("代码审查…", systemImage: "text.magnifyingglass", action: actions.openReview)
         } label: {
             // macOS draws a menu's label itself and keeps only its icon and text, so
             // the text and the indicator have to say what it does.
@@ -344,7 +354,7 @@ struct PanelView: View {
             if sessions.isEmpty {
                 ContentUnavailableView("没有待处理会话", systemImage: "checkmark.circle")
             } else {
-                sessionRows(sessions, now: now, showProject: true)
+                sessionRows(sessions, now: now, mixedBranches: true, showProject: true)
                     .modifier(SessionGroupSurface())
             }
         }
@@ -618,14 +628,13 @@ struct PanelView: View {
 
     func sessionRows(_ sessions: [Session], now: Date, mixedBranches: Bool = false,
                      compact: Bool = false, showProject: Bool = false) -> some View {
-        let sharing = PanelLayout.sharingDirectory(store.liveSessions)
-        return LazyVStack(spacing: 0) {
+        LazyVStack(spacing: 0) {
             ForEach(sessions) { session in
                 if session.id != sessions.first?.id {
                     CardDivider(leading: BellLayout.rowTextLeading)
                 }
                 row(session, now: now, rowBranch: mixedBranches ? session.project.branch : nil,
-                    compact: compact, showProject: showProject, sharesDirectory: sharing.contains(session.id))
+                    compact: compact, showProject: showProject)
             }
         }
         .padding(.vertical, BellLayout.rowInset)
@@ -634,14 +643,13 @@ struct PanelView: View {
     }
 
     private func row(_ session: Session, now: Date, rowBranch: String?, compact: Bool,
-                     showProject: Bool, sharesDirectory: Bool) -> some View {
+                     showProject: Bool) -> some View {
         SessionRowView(
             session: session,
             now: now,
             rowBranch: rowBranch,
             showProject: showProject,
             compact: compact,
-            sharesDirectory: sharesDirectory,
             selected: state.selectionShown && state.selectedID == session.id,
             feedback: state.feedbackText(for: session.id),
             statusPending: store.tracker.isPendingClosure(session.id),
@@ -655,6 +663,15 @@ struct PanelView: View {
                 state.selectedID = session.id
                 state.detailID = session.id
             },
+            // In the row while the list shows; the hidden list under a detail never edits.
+            renaming: Binding(
+                get: { state.renamingID == session.id && state.detailID == nil },
+                set: {
+                    if $0 { state.selectedID = session.id }
+                    state.renamingID = $0 ? session.id : nil
+                }
+            ),
+            onRename: { try store.rename(session, to: $0) },
             tasks: store.tasks,
             taskActions: actions.tasks
         )
@@ -676,6 +693,11 @@ struct PanelView: View {
                     onActivate: { actions.activate(session) },
                     onCopy: { actions.copyResume(session) },
                     onReveal: { actions.reveal(session) },
+                    renaming: Binding(
+                        get: { state.renamingID == session.id },
+                        set: { state.renamingID = $0 ? session.id : nil }
+                    ),
+                    onRename: { try store.rename(session, to: $0) },
                     tasks: store.tasks,
                     taskActions: actions.tasks
                 )

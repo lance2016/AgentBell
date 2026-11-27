@@ -38,9 +38,20 @@ final class DesktopIconController: NSObject {
     let bubbles: BubbleController
 
     private static let frameName = "DesktopIcon"
+    private static let dockKey = "desktopIcon.dock"
     private let panel: IconPanel
     private let mouse = IconMouseView()
     private let mascot = DesktopMascotState()
+    private lazy var hosting = NSHostingView(rootView: DesktopIconView(state: mascot))
+    private var dock: Dock?
+    private var expanded = false
+    private var hoverTarget: Bool?
+    private var hoverTask: Task<Void, Never>?
+
+    private struct Dock {
+        let edge: DesktopEdge
+        let display: UInt32
+    }
     private var positionReference = CGRect.zero
     private var celebration: Task<Void, Never>?
     private var previousRoundStates: [String: RoundState] = [:]
@@ -69,16 +80,16 @@ final class DesktopIconController: NSObject {
         super.init()
 
         mascot.size = side
-        let hosting = NSHostingView(rootView: DesktopIconView(state: mascot))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        hosting.autoresizingMask = [.width, .height]
-        mouse.frame = hosting.frame
+        mouse.frame = NSRect(origin: .zero, size: size)
+        mouse.wantsLayer = true
+        mouse.layer?.masksToBounds = true
         mouse.addSubview(hosting)
         mouse.onClick = { [weak self] in self?.onClick?() }
         mouse.onMoved = { [weak self] in self?.bubbles.reposition() }
-        mouse.onDropped = { [weak self] in self?.rememberPosition() }
+        mouse.onDragStarted = { [weak self] in self?.undockForDrag() }
+        mouse.onDropped = { [weak self] in self?.finishDrag() }
         mouse.onMenu = { [weak self] event in self?.showMenu(event) }
-        mouse.onPointer = { [weak self] in self?.updateGaze() }
+        mouse.onPointer = { [weak self] in self?.pointerMoved() }
         mouse.onDragTilt = { [weak self] tilt in
             self?.mascot.dragTilt = tilt
             self?.updateGaze()
@@ -87,6 +98,9 @@ final class DesktopIconController: NSObject {
         mouse.setAccessibilityRole(.button)
         panel.contentView = mouse
         placeAtStart(size: size)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil
+        )
         observe(store)
     }
 
@@ -99,12 +113,15 @@ final class DesktopIconController: NSObject {
             updatePresentation()
         } else {
             stopPointerMonitoring()
+            cancelHover()
+            expanded = false
             mouse.resetDrag()
             mascot.dragTilt = nil
             mascot.gaze = .zero
             mascot.watchingPointer = false
             stopCelebration()
             panel.orderOut(nil)
+            layoutDock()
         }
         bubbles.iconVisible = visible
     }
@@ -137,10 +154,10 @@ final class DesktopIconController: NSObject {
 
     private func startPointerMonitoring() {
         globalPointerMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateGaze() }
+            MainActor.assumeIsolated { self?.pointerMoved() }
         }
         localPointerMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            MainActor.assumeIsolated { self?.updateGaze() }
+            MainActor.assumeIsolated { self?.pointerMoved() }
             return event
         }
     }
@@ -155,8 +172,11 @@ final class DesktopIconController: NSObject {
     private func updateGaze() {
         guard mascot.isVisible else { return }
         let pointer = NSEvent.mouseLocation
-        let canWatch = mascot.appearance == .idle && mascot.dragTilt == nil
-        let gaze = canWatch ? DesktopPlacement.mascotGaze(pointer: pointer, icon: panel.frame) : .zero
+        let canWatch = mascot.appearance == .idle && mascot.dragTilt == nil && (dock == nil || expanded)
+        let frame = panel.frame
+        let target = mascot.mirrored ? CGPoint(x: 2 * frame.midX - pointer.x, y: pointer.y) : pointer
+        let offset = canWatch ? DesktopPlacement.mascotGaze(pointer: target, icon: frame) : .zero
+        let gaze = CGSize(width: mascot.mirrored ? -offset.width : offset.width, height: offset.height)
         let watching = canWatch && (gaze != .zero || panel.frame.contains(pointer))
         if watching != mascot.watchingPointer { mascot.watchingPointer = watching }
         if gaze != mascot.gaze { mascot.gaze = gaze }
@@ -166,35 +186,178 @@ final class DesktopIconController: NSObject {
         let side = CGFloat(points)
         guard side != mascot.size else { return }
         let size = NSSize(width: side, height: side)
-        let frame = panel.frame
-        let screen = panel.screen ?? NSScreen.screens.first { $0.visibleFrame.intersects(frame) } ?? NSScreen.main
         mascot.size = side
-        // Use the last explicitly placed frame for each slider tick so resizing cannot drift.
-        let updated = screen.map { DesktopPlacement.resizedIcon(positionReference, to: size, visible: $0.visibleFrame) }
-            ?? NSRect(origin: frame.origin, size: size)
-        panel.setFrame(updated, display: panel.isVisible)
-        bubbles.reposition()
-        updateGaze()
+        if dock != nil {
+            screensChanged()
+        } else {
+            let frame = panel.frame
+            let updated = (panel.screen ?? screenContaining(frame) ?? NSScreen.main).map {
+                DesktopPlacement.resizedIcon(positionReference, to: size, visible: $0.visibleFrame)
+            } ?? NSRect(origin: frame.origin, size: size)
+            layoutIcon(updated)
+        }
+        pointerMoved()
     }
 
-    /// Restore the saved position while taking the current size from settings.
+    private var iconSize: CGSize { CGSize(width: mascot.size, height: mascot.size) }
+
+    private func layoutIcon(_ frame: CGRect) {
+        if frame != panel.frame { panel.setFrame(frame, display: panel.isVisible) }
+        let crop = dock?.edge == .left ? frame.width - mascot.size : 0
+        hosting.frame = CGRect(origin: CGPoint(x: crop, y: 0), size: iconSize)
+        bubbles.reposition()
+    }
+
+    private func layoutDock() {
+        guard let dock, let screen = NSScreen.screens.first(where: { displayID($0) == dock.display }) else { return }
+        let frame = DesktopPlacement.dockedIcon(
+            dock.edge, size: mascot.size, y: positionReference.minY, visible: screen.visibleFrame,
+            expanded: expanded, needsAttention: mascot.needsAttention
+        )
+        layoutIcon(frame)
+    }
+
+    private func displayID(_ screen: NSScreen) -> UInt32? {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+    }
+
+    private func neighbors(of screen: NSScreen) -> [CGRect] {
+        NSScreen.screens.filter { $0.frame != screen.frame }.map(\.frame)
+    }
+
+    private func screenContaining(_ frame: CGRect) -> NSScreen? {
+        NSScreen.screens.first { $0.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) }
+            ?? NSScreen.screens.first { $0.frame.intersects(frame) }
+    }
+
+    /// Keep the saved full frame compatible with older versions.
     private func placeAtStart(size: NSSize) {
-        if panel.setFrameUsingName(Self.frameName),
-           let screen = NSScreen.screens.first(where: { $0.visibleFrame.contains(CGPoint(x: panel.frame.midX, y: panel.frame.midY)) })
-                ?? NSScreen.screens.first(where: { $0.visibleFrame.intersects(panel.frame) }) {
-            positionReference = panel.frame
-            panel.setFrame(DesktopPlacement.resizedIcon(positionReference, to: size, visible: screen.visibleFrame), display: false)
+        if panel.setFrameUsingName(Self.frameName), let screen = screenContaining(panel.frame) {
+            positionReference = DesktopPlacement.resizedIcon(panel.frame, to: size, visible: screen.visibleFrame)
+            if let saved = UserDefaults.standard.dictionary(forKey: Self.dockKey),
+               let name = saved["edge"] as? String, let edge = DesktopEdge(rawValue: name),
+               let display = (saved["display"] as? NSNumber)?.uint32Value, display == displayID(screen),
+               DesktopPlacement.canDock(edge, icon: positionReference, screen: screen.frame,
+                                        visible: screen.visibleFrame, neighbors: neighbors(of: screen)) {
+                dock = Dock(edge: edge, display: display)
+                mascot.mirrored = edge == .right
+                layoutDock()
+                return
+            }
+        } else {
+            let origin = NSScreen.main.map { DesktopPlacement.defaultOrigin(size: size, visible: $0.visibleFrame) }
+                ?? panel.frame.origin
+            positionReference = NSRect(origin: origin, size: size)
+        }
+        layoutIcon(positionReference)
+    }
+
+    private func undockForDrag() {
+        cancelHover()
+        guard dock != nil else { return }
+        let origin = CGPoint(x: panel.frame.minX + hosting.frame.minX, y: panel.frame.minY)
+        dock = nil
+        expanded = false
+        layoutIcon(CGRect(origin: origin, size: iconSize))
+    }
+
+    private func finishDrag() {
+        let pointer = NSEvent.mouseLocation
+        let frame = panel.frame
+        let screen = NSScreen.screens.first { $0.frame.contains(pointer) }
+            ?? screenContaining(frame) ?? NSScreen.main
+        positionReference = frame
+        dock = nil
+        if let screen {
+            let visible = screen.visibleFrame
+            positionReference = DesktopPlacement.resizedIcon(frame, to: iconSize, visible: visible)
+            if let display = displayID(screen),
+               let edge = DesktopPlacement.dockingEdge(
+                   for: frame, screen: screen.frame, visible: visible, neighbors: neighbors(of: screen)
+               ) {
+                positionReference = DesktopPlacement.dockedIcon(
+                    edge, size: mascot.size, y: frame.minY, visible: visible, expanded: true, needsAttention: false
+                )
+                dock = Dock(edge: edge, display: display)
+            }
+        }
+        mascot.mirrored = dock?.edge == .right
+        layoutIcon(positionReference)
+        panel.saveFrame(usingName: Self.frameName)
+        if let dock {
+            UserDefaults.standard.set(["edge": dock.edge.rawValue, "display": dock.display], forKey: Self.dockKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.dockKey)
+        }
+        layoutDock()
+    }
+
+    @objc private func screensChanged() {
+        guard let dock, !mouse.isPressed else { return }
+        let screen = NSScreen.screens.first { displayID($0) == dock.display }
+        if let screen {
+            let visible = screen.visibleFrame
+            let full = DesktopPlacement.dockedIcon(
+                dock.edge, size: mascot.size, y: positionReference.minY, visible: visible,
+                expanded: true, needsAttention: false
+            )
+            if DesktopPlacement.canDock(dock.edge, icon: full, screen: screen.frame,
+                                        visible: visible, neighbors: neighbors(of: screen)) {
+                layoutDock()
+                pointerMoved()
+                return
+            }
+        }
+        if let screen = screen ?? screenContaining(positionReference) ?? NSScreen.main {
+            cancelHover()
+            self.dock = nil
+            expanded = false
+            mascot.mirrored = false
+            positionReference = DesktopPlacement.resizedIcon(positionReference, to: iconSize, visible: screen.visibleFrame)
+            UserDefaults.standard.removeObject(forKey: Self.dockKey)
+            layoutIcon(positionReference)
+            panel.saveFrame(usingName: Self.frameName)
+        }
+        pointerMoved()
+    }
+
+    private func pointerMoved() {
+        updateGaze()
+        guard mascot.isVisible, dock != nil, !mouse.isPressed else {
+            cancelHover()
             return
         }
-        let origin = NSScreen.main.map { DesktopPlacement.defaultOrigin(size: size, visible: $0.visibleFrame) }
-            ?? panel.frame.origin
-        positionReference = NSRect(origin: origin, size: size)
-        panel.setFrame(positionReference, display: false)
+        let inside = pointerAtDock()
+        if inside == expanded {
+            cancelHover()
+        } else if inside != hoverTarget {
+            cancelHover()
+            hoverTarget = inside
+            hoverTask = Task { [weak self] in
+                do {
+                    try await Task.sleep(for: .milliseconds(inside ? 170 : 330))
+                } catch { return }
+                guard let self else { return }
+                self.hoverTask = nil
+                self.hoverTarget = nil
+                guard self.mascot.isVisible, self.dock != nil, !self.mouse.isPressed,
+                      self.pointerAtDock() == inside else { return }
+                self.expanded = inside
+                self.layoutDock()
+                self.updateGaze()
+            }
+        }
     }
 
-    private func rememberPosition() {
-        positionReference = panel.frame
-        panel.saveFrame(usingName: Self.frameName)
+    private func pointerAtDock() -> Bool {
+        let pointer = NSEvent.mouseLocation
+        return panel.frame.contains(pointer) || (expanded && bubbles.containsPointer(pointer))
+    }
+
+    private func cancelHover() {
+        hoverTask?.cancel()
+        hoverTask = nil
+        hoverTarget = nil
     }
 
     /// Keep the screen, tooltip and accessibility label on the same status.
@@ -225,7 +388,8 @@ final class DesktopIconController: NSObject {
     }
 
     private func updatePresentation() {
-        updateGaze()
+        layoutDock()
+        pointerMoved()
         let label = mascot.appearance == .completed ? "刚完成一轮任务" : Copy.statusItemLabel(mascot.status)
         mouse.toolTip = label
         mouse.setAccessibilityLabel(label)
@@ -254,6 +418,7 @@ final class DesktopIconController: NSObject {
 private final class IconMouseView: NSView {
     var onClick: (() -> Void)?
     var onMoved: (() -> Void)?
+    var onDragStarted: (() -> Void)?
     var onDropped: (() -> Void)?
     var onMenu: ((NSEvent) -> Void)?
     var onPointer: (() -> Void)?
@@ -263,6 +428,7 @@ private final class IconMouseView: NSView {
     private var pressedAt: NSPoint?
     private var originAtPress: NSPoint?
     private var dragging = false
+    var isPressed: Bool { pressedAt != nil }
 
     override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -290,16 +456,22 @@ private final class IconMouseView: NSView {
         pressedAt = NSEvent.mouseLocation
         originAtPress = window?.frame.origin
         dragging = false
+        onPointer?()
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let pressedAt, let originAtPress, let window else { return }
+        guard let pressedAt, let window else { return }
         let now = NSEvent.mouseLocation
         let dx = now.x - pressedAt.x
         let dy = now.y - pressedAt.y
         // A hand that shakes a little while clicking is still clicking.
-        if !dragging && hypot(dx, dy) < 4 { return }
-        dragging = true
+        if !dragging {
+            guard hypot(dx, dy) >= 4 else { return }
+            dragging = true
+            onDragStarted?()
+            originAtPress = window.frame.origin
+        }
+        guard let originAtPress else { return }
         let origin = NSPoint(x: originAtPress.x + dx, y: originAtPress.y + dy)
         let horizontalStep = origin.x - window.frame.minX
         onDragTilt?(Double(min(5, max(-5, horizontalStep * 0.9))))
@@ -317,6 +489,7 @@ private final class IconMouseView: NSView {
         } else if wasPressed {
             onClick?()
         }
+        onPointer?()
     }
 
     func resetDrag() {

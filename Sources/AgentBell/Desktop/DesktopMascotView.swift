@@ -8,6 +8,7 @@ import SwiftUI
 final class DesktopMascotState {
     var status = OverallStatus.idle
     var isVisible = false
+    var mirrored = false
     var size = CGFloat(Entry.defaultDesktopSize)
     var gaze = CGSize.zero
     var watchingPointer = false
@@ -121,7 +122,8 @@ struct DesktopMascotView: View {
             size: size,
             animateRain: state.isVisible && !reduceMotion,
             openEyes: awake && !blinking,
-            gaze: awake ? state.gaze : .zero
+            gaze: awake ? state.gaze : .zero,
+            mirrored: state.mirrored
         )
         .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
         .rotationEffect(.degrees(reduceMotion ? 0 : state.dragTilt ?? 0))
@@ -159,6 +161,7 @@ struct DesktopMascotDrawing: View {
     var animateRain = false
     var openEyes = false
     var gaze = CGSize.zero
+    var mirrored = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -168,7 +171,7 @@ struct DesktopMascotDrawing: View {
                 .overlay { Ellipse().strokeBorder(.black.opacity(0.12), lineWidth: size * 0.009) }
                 .frame(width: size * 0.191, height: size * 0.185)
                 .shadow(color: appearance.lampGlow, radius: size * 0.038)
-                .position(x: size * 0.684, y: size * 0.108)
+                .position(x: size * (mirrored ? 0.316 : 0.684), y: size * 0.108)
             if appearance == .idle && openEyes {
                 ZStack {
                     sprite(artwork.leftEye)
@@ -178,7 +181,7 @@ struct DesktopMascotDrawing: View {
                 .animation(.easeOut(duration: 0.15), value: gaze)
             } else {
                 screen
-                    .position(x: size * 0.597, y: size * 0.608)
+                    .position(x: size * (mirrored ? 0.403 : 0.597), y: size * 0.608)
             }
         }
         .frame(width: size, height: size)
@@ -191,6 +194,7 @@ struct DesktopMascotDrawing: View {
             .resizable()
             .interpolation(.high)
             .frame(width: size, height: size)
+            .scaleEffect(x: mirrored ? -1 : 1, y: 1)
     }
 
     private var screen: some View {

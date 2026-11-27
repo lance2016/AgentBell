@@ -47,10 +47,12 @@ public enum GhosttyScript {
     on run argv
       set projectDirectory to item 1 of argv
       set claudeExecutable to item 2 of argv
+      set claudeCommand to quoted form of claudeExecutable
+      if (count of argv) > 2 then set claudeCommand to claudeCommand & " --resume " & quoted form of (item 3 of argv)
       tell application id "com.mitchellh.ghostty"
         set cfg to new surface configuration
         set initial working directory of cfg to projectDirectory
-        set initial input of cfg to (quoted form of claudeExecutable) & linefeed
+        set initial input of cfg to claudeCommand & linefeed
         if (count of windows) is 0 then
           new window with configuration cfg
         else

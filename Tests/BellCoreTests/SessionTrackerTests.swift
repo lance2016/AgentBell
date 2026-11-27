@@ -28,6 +28,47 @@ struct SessionTrackerTests {
         #expect(tracker.live["a"]?.stateSince == t0 + 120)
     }
 
+    @Test func aNameGivenInAgentBellFollowsTheSession() {
+        var tracker = SessionTracker()
+        tracker.applyPoll([record("a")], at: t0, project: project)
+        tracker.rename("a", to: "  支付重构 ")
+        #expect(tracker.live["a"]?.title == "支付重构")
+        #expect(tracker.titles == ["a": "支付重构"])
+        // Polling rebuilds the row, not the name.
+        tracker.applyPoll([record("a")], at: t0 + 10, project: project)
+        #expect(tracker.live["a"]?.alias == "支付重构")
+        // Closed, and resumed later with `claude --resume`.
+        tracker.applyPoll([], at: t0 + 20, project: project)
+        tracker.applyPoll([], at: t0 + 22, project: project)
+        #expect(tracker.recent.first?.alias == "支付重构")
+        tracker.rename("a", to: "支付重构 v2")
+        #expect(tracker.recent.first?.title == "支付重构 v2")
+        tracker.applyPoll([record("a")], at: t0 + 30, project: project)
+        #expect(tracker.live["a"]?.alias == "支付重构 v2")
+        // An empty name gives the session back its own.
+        tracker.rename("a", to: " ")
+        #expect(tracker.live["a"]?.alias == nil)
+        #expect(tracker.live["a"]?.title == "a")
+        #expect(tracker.titles.isEmpty)
+    }
+
+    @Test func namingASessionBackToItsOwnTitleDropsTheName() {
+        var tracker = SessionTracker()
+        tracker.applyPoll([record("a")], at: t0, project: project)
+        tracker.rename("a", to: "支付重构")
+        tracker.rename("a", to: " a ")
+        #expect(tracker.titles.isEmpty)
+        #expect(tracker.live["a"]?.alias == nil)
+    }
+
+    @Test func savedNamesComeBackWithTheirSessions() {
+        var tracker = SessionTracker()
+        let saved = Session(id: "a", pid: 1, cwd: "/p", project: project("/p"), startedAt: t0,
+                            state: .idle, stateSince: t0, endedAt: t0)
+        tracker.restore([:], sessions: [saved], titles: ["a": "支付重构"])
+        #expect(tracker.recent.first?.title == "支付重构")
+    }
+
     @Test func vanishedSessionMovesToRecent() {
         var tracker = SessionTracker()
         tracker.applyPoll([record("a"), record("b")], at: t0, project: project)

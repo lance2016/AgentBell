@@ -54,7 +54,7 @@ public enum TerminalApp: String, CaseIterable, Identifiable, Sendable {
         stored.flatMap(TerminalApp.init(rawValue:)) ?? allCases.first(where: isInstalled) ?? .terminal
     }
 
-    /// Arguments: the project directory, then the claude executable.
+    /// Arguments: project directory, Claude executable, and an optional session ID.
     public var launchScript: String {
         switch self {
         case .ghostty: GhosttyScript.launch
@@ -100,7 +100,9 @@ enum ITermScript {
     on run argv
       set projectDirectory to item 1 of argv
       set claudeExecutable to item 2 of argv
-      set shellLine to "cd " & quoted form of projectDirectory & " && " & quoted form of claudeExecutable
+      set claudeCommand to quoted form of claudeExecutable
+      if (count of argv) > 2 then set claudeCommand to claudeCommand & " --resume " & quoted form of (item 3 of argv)
+      set shellLine to "cd " & quoted form of projectDirectory & " && " & claudeCommand
       set wasRunning to application id "com.googlecode.iterm2" is running
       tell application id "com.googlecode.iterm2"
         if (count of windows) is 0 then
@@ -149,7 +151,9 @@ enum AppleTerminalScript {
     on run argv
       set projectDirectory to item 1 of argv
       set claudeExecutable to item 2 of argv
-      set shellLine to "cd " & quoted form of projectDirectory & " && " & quoted form of claudeExecutable
+      set claudeCommand to quoted form of claudeExecutable
+      if (count of argv) > 2 then set claudeCommand to claudeCommand & " --resume " & quoted form of (item 3 of argv)
+      set shellLine to "cd " & quoted form of projectDirectory & " && " & claudeCommand
       set wasRunning to application id "com.apple.Terminal" is running
       tell application id "com.apple.Terminal"
         if wasRunning or (count of windows) is 0 then

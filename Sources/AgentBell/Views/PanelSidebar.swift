@@ -116,7 +116,7 @@ extension PanelView {
                 if count > 0 {
                     Text("\(count)")
                         .font(.rowTime)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(picked ? Color.bellAccent : .secondary)
                         .accessibilityHidden(true)
                 }
             }
@@ -130,56 +130,22 @@ extension PanelView {
         .accessibilityAddTraits(picked ? .isSelected : [])
     }
 
-    /// One project in the content pane: its sessions as a plain list, and the closed ones
-    /// folded away under them. Its name and how it stands are the pane's title.
+    /// One project in the content pane: its sessions on a card, and the closed ones
+    /// folded away on a card under it. Its name and how it stands are the pane's title.
     func projectPage(_ project: ProjectEntry, now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(spacing: 10) {
             if !project.live.isEmpty {
                 sessionRows(project.live, now: now, mixedBranches: project.branchPerRow)
+                    .modifier(SessionGroupSurface())
             }
             if !project.closed.isEmpty {
-                closedFold(project, now: now)
+                // A fold while something is open; with nothing open, the closed ones are the page.
+                historySection(project.closed, now: now, expanded: state.showsClosed(project),
+                               onToggle: project.live.isEmpty ? nil : { state.toggleHistory(for: project.id) })
+                    .modifier(SessionGroupSurface())
             }
         }
-        // The pane's own inset already stands the list off; the rows bring theirs.
-        .padding(.horizontal, -BellLayout.rowInset)
-    }
-
-    /// "已关闭的 3 个会话": a fold while something is open, a plain caption once nothing is.
-    @ViewBuilder private func closedFold(_ project: ProjectEntry, now: Date) -> some View {
-        let expanded = state.showsClosed(project)
-        let caption = Text("已关闭的 \(project.closed.count) 个会话")
-            .font(.rowDetail)
-            .foregroundStyle(.secondary)
-        if project.live.isEmpty {
-            caption
-                .padding(.horizontal, BellLayout.rowInset + BellLayout.rowLeading)
-                .padding(.top, 2)
-                .accessibilityAddTraits(.isHeader)
-        } else {
-            Button { state.toggleHistory(for: project.id) } label: {
-                HStack(spacing: BellLayout.rowGap) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                        .frame(width: 12)
-                        .accessibilityHidden(true)
-                    caption
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, BellLayout.rowLeading)
-                .frame(height: 30)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(BellButtonStyle(radius: BellLayout.rowRadius + 2))
-            .padding(.horizontal, BellLayout.rowInset)
-            .padding(.top, 4)
-            .accessibilityValue(expanded ? "已展开" : "已折叠")
-        }
-        if expanded {
-            sessionRows(project.closed, now: now, compact: true)
-        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -216,7 +182,7 @@ private struct ProjectItem: View {
                 if showCount && !project.live.isEmpty {
                     Text("\(project.live.count)")
                         .font(.rowTime)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(picked ? Color.bellAccent : .secondary)
                         .frame(minWidth: 26, alignment: .trailing)
                         .accessibilityHidden(true)
                 }

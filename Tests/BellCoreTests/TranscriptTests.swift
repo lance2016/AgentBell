@@ -146,6 +146,23 @@ struct SessionTitleTests {
         #expect(fresh.title == "/review")
     }
 
+    @Test func namesTheUserGaveOutrankClaudes() {
+        let tail = """
+        {"type":"custom-title","customTitle":"玩法优化","sessionId":"s"}
+        {"type":"ai-title","aiTitle":"重写电机驱动","sessionId":"s"}
+        """
+        let summary = Transcript.summarize(tail: tail, cutAtStart: false)
+        #expect(summary.customTitle == "玩法优化")
+        #expect(summary.title == "重写电机驱动")
+        // A /rename survives the session closing, when `claude agents` no longer names it.
+        var renamed = session(name: nil, summary: summary)
+        #expect(renamed.title == "玩法优化")
+        // A name given in AgentBell comes before every other.
+        renamed.alias = "支付重构"
+        #expect(session(name: "我的名字", summary: summary).title == "我的名字")
+        #expect(renamed.title == "支付重构")
+    }
+
     @Test func secondLineFollowsState() {
         let summary = TranscriptSummary(title: "重写电机驱动", lastPrompt: "跑一下测试", lastReply: "测试全部通过", modifiedAt: t0)
         #expect(Copy.secondLine(session(name: nil, state: .working, summary: summary)) == "跑一下测试")
@@ -169,6 +186,19 @@ struct SessionTitleTests {
         let untitled = TranscriptSummary(lastPrompt: "跑一下测试", modifiedAt: t0)
         #expect(Copy.asked(session(name: nil, summary: untitled)) == nil)
         #expect(Copy.standing(session(name: nil, summary: nil)) == "空闲")
+    }
+
+    @Test func rowSummaryIsOneLine() {
+        let summary = TranscriptSummary(title: "重写电机驱动", lastPrompt: "跑一下测试", lastReply: "测试全部通过", modifiedAt: t0)
+        #expect(Copy.summary(session(name: nil, state: .completed, summary: summary)) == .init(text: "做完：测试全部通过", asked: false))
+        // The state's word alone says less than the question it is working on.
+        #expect(Copy.summary(session(name: nil, state: .working, summary: summary)) == .init(text: "跑一下测试", asked: true))
+        // Waiting keeps its own words, even when they are only the state's word.
+        let unanswered = TranscriptSummary(title: "重写电机驱动", lastPrompt: "跑一下测试", modifiedAt: t0)
+        #expect(Copy.summary(session(name: nil, state: .waiting, summary: unanswered)) == .init(text: "等你", asked: false))
+        // Nothing asked beyond the title: the state's word is all there is.
+        let untitled = TranscriptSummary(lastPrompt: "跑一下测试", modifiedAt: t0)
+        #expect(Copy.summary(session(name: nil, state: .working, summary: untitled)) == .init(text: "在工作", asked: false))
     }
 
     @Test func idleCountsFromLastWrite() {

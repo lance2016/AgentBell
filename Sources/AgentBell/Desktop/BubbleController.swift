@@ -82,7 +82,11 @@ final class BubbleController {
         CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!) < awayAfter
     }
 
-    /// Follows the icon while it is dragged.
+    func containsPointer(_ pointer: CGPoint) -> Bool {
+        panel.isVisible && panel.frame.contains(pointer)
+    }
+
+    /// Follows the icon while it is dragged or changes shape.
     func reposition() {
         guard panel.isVisible else { return }
         place()

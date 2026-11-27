@@ -91,15 +91,6 @@ public enum PanelLayout {
         attentionOrder(sessions.filter { !$0.isEnded && ($0.state == .waiting || $0.state == .failed) }).first
     }
 
-    /// Ids of open sessions that share their directory with another open session: their
-    /// edits land in one working copy and can overwrite each other.
-    public static func sharingDirectory(_ sessions: [Session]) -> Set<String> {
-        let byDirectory = Dictionary(grouping: sessions.filter { !$0.isEnded }) {
-            ($0.cwd as NSString).standardizingPath
-        }
-        return Set(byDirectory.values.filter { $0.count > 1 }.flatMap { $0.map(\.id) })
-    }
-
     public static func overallStatus(_ sessions: [Session]) -> OverallStatus {
         let waiting = sessions.filter { $0.state == .waiting }.count
         if waiting > 0 { return .waiting(count: waiting) }

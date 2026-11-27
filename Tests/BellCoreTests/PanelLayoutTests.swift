@@ -119,19 +119,6 @@ struct PanelLayoutTests {
         ])
         #expect(picked?.id == "older")
     }
-
-    @Test func sessionsInOneDirectoryAreFlagged() {
-        var ended = session("ended", root: "/c")
-        ended.endedAt = t0
-        let shared = PanelLayout.sharingDirectory([
-            session("a1", root: "/a"),
-            session("a2", root: "/a/"),
-            session("b", root: "/b"),
-            session("c", root: "/c"),
-            ended,
-        ])
-        #expect(shared == ["a1", "a2"])
-    }
 }
 
 struct CopyTests {

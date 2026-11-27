@@ -120,6 +120,22 @@ final class Notifier: NSObject {
         previewsHidden = previews == .never
     }
 
+    /// Exercises the system notification channel independently of Claude hooks.
+    func sendTestNotification() async -> Bool {
+        await refresh()
+        guard permission == .allowed else { return false }
+        let content = UNMutableNotificationContent()
+        content.title = "AgentBell 测试提醒"
+        content.body = "看到这条提醒，说明 macOS 通知可以送达。"
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: "agentbell.test-notification", content: content, trigger: nil)
+        return await withCheckedContinuation { continuation in
+            center.add(request) { error in
+                continuation.resume(returning: error == nil)
+            }
+        }
+    }
+
     /// Every switch defaults to on.
     static func isOn(_ key: String) -> Bool {
         UserDefaults.standard.object(forKey: key) as? Bool ?? true

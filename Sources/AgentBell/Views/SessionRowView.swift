@@ -2,16 +2,14 @@ import BellCore
 import SwiftUI
 
 /// One session. A click does the one thing you came for: back to its terminal, or, once
-/// the session has ended, copy `claude --resume`. The trailing button opens the detail;
-/// everything else lives in the context menu.
+/// the session has ended, copy `claude --resume`. The pencil renames it in place and the
+/// trailing button opens the detail; everything else lives in the context menu.
 struct SessionRowView: View {
     let session: Session
     let now: Date
     let rowBranch: String?
     let showProject: Bool
     let compact: Bool
-    /// Another open session works in the same directory.
-    let sharesDirectory: Bool
     let selected: Bool
     let feedback: String?
     let statusPending: Bool
@@ -19,6 +17,9 @@ struct SessionRowView: View {
     let onCopy: () -> Void
     let onReveal: () -> Void
     let onDetail: () -> Void
+    /// The name is open for editing in the row.
+    @Binding var renaming: Bool
+    let onRename: (String) throws -> Void
     let tasks: TaskStore
     let taskActions: TaskActions
 
@@ -28,74 +29,75 @@ struct SessionRowView: View {
 
     private var primaryTitle: String { session.isEnded ? "复制恢复命令" : "回到终端" }
 
+    /// The unfinished task this session was added to, if any: the row's one real tag.
+    private var task: DevTask? {
+        compact ? nil : tasks.tasks(containing: session.id).first { $0.status != .done }
+    }
+
+    private var accessibilityValue: String {
+        [statusPending ? "会话状态待确认" : nil,
+         rowBranch.map { "分支 \($0)" },
+         task.map { "任务 \($0.title)" }]
+            .compactMap { $0 }
+            .joined(separator: "，")
+    }
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: BellLayout.rowRadius + 2, style: .continuous)
-        HStack(alignment: .center, spacing: 0) {
-            Button(action: onActivate) {
-                HStack(alignment: .top, spacing: BellLayout.rowGap) {
-                    // Centred on the title's line, whatever stands under it.
-                    LampView(kind: kind).padding(.top, 2)
-                    VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: 0) {
+            if renaming {
+                // Not inside the row's button: clicks in the field must not go to the terminal.
+                rowContent {
+                    RenameField(title: session.title, size: .row,
+                                onSave: { try onRename($0); renaming = false },
+                                onCancel: { renaming = false })
+                }
+                .padding(.trailing, 6)
+            } else {
+                Button(action: onActivate) {
+                    rowContent {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text(session.title)
-                                .font(.rowTitle)
+                                .font(session.isEnded ? .rowTitle : .sessionTitle)
                                 .foregroundStyle(session.isEnded ? .secondary : .primary)
                                 .lineLimit(1)
                             Spacer(minLength: 4)
-                            if sharesDirectory {
-                                Text("同目录")
-                                    .font(.rowDetail)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .fixedSize()
-                                    .help("另一个会话也在这个目录里工作，改动可能互相覆盖。分开做可以从「新建会话」选别的 worktree")
-                            }
-                            if showProject {
-                                Text(session.project.name)
-                                    .font(.rowDetail)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .frame(maxWidth: 100)
-                            } else if let rowBranch {
-                                BranchTag(branch: rowBranch)
-                                    .frame(maxWidth: 72, alignment: .trailing)
-                            }
                             Text(now.relativeLabel(since: Copy.since(session)))
                                 .font(.rowTime)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .fixedSize()
                         }
-                        lines
                     }
                 }
-                .padding(.leading, BellLayout.rowLeading)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(primaryTitle)
-            .accessibilityLabel(Copy.accessibilityLabel(session, now: now))
-            .accessibilityAddTraits(selected ? .isSelected : [])
-            .accessibilityHint(primaryTitle)
-            .accessibilityValue(statusPending ? "会话状态待确认" : sharesDirectory ? "和另一个会话在同一目录" : "")
-            .accessibilityAction(named: "查看详情", onDetail)
-            .accessibilityAction(named: "复制恢复命令", onCopy)
-            .accessibilityAction(named: "在访达中显示", onReveal)
+                .buttonStyle(.plain)
+                .help(primaryTitle)
+                .accessibilityLabel(Copy.accessibilityLabel(session, now: now))
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .accessibilityHint(primaryTitle)
+                .accessibilityValue(accessibilityValue)
+                .accessibilityAction(named: "查看详情", onDetail)
+                .accessibilityAction(named: "复制恢复命令", onCopy)
+                .accessibilityAction(named: "在访达中显示", onReveal)
+                .accessibilityAction(named: "重命名") { renaming = true }
 
-            // Faint until the row is pointed at or picked, so the lamp stays the loudest thing.
-            Button(action: onDetail) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 13))
-                    .foregroundStyle(hovered || selected ? .secondary : .tertiary)
-                    .frame(width: BellLayout.inlineControlSize, height: BellLayout.inlineControlSize)
+                // Both level with the title, however many lines stand under it.
+                RenameButton(title: session.title) { renaming = true }
+                    .padding(.leading, 4)
+                    .padding(.top, compact ? 4 : 6)
+                // Faint until the row is pointed at or picked, so the lamp stays the loudest thing.
+                Button(action: onDetail) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(hovered || selected ? .secondary : .tertiary)
+                        .frame(width: BellLayout.inlineControlSize, height: BellLayout.inlineControlSize)
+                }
+                .buttonStyle(BellButtonStyle(radius: BellLayout.controlRadius))
+                .padding(.horizontal, 6)
+                .padding(.top, compact ? 4 : 6)
+                .help("查看详情（⌘I）")
+                .accessibilityLabel("查看详情：\(session.title)")
             }
-            .buttonStyle(BellButtonStyle(radius: BellLayout.controlRadius))
-            .padding(.horizontal, 6)
-            .help("查看详情（⌘I）")
-            .accessibilityLabel("查看详情：\(session.title)")
         }
         .background(selected ? BellLayout.selectionFill : hovered ? BellLayout.controlFill : .clear, in: shape)
         .background(kind == .waiting ? BellLayout.waitingFill : .clear, in: shape)
@@ -103,16 +105,35 @@ struct SessionRowView: View {
         .onHover { hovered = $0 }
         .contextMenu {
             SessionCommands(onDetail: onDetail, onActivate: session.isEnded ? nil : onActivate,
-                            onCopy: onCopy, onReveal: onReveal)
+                            onCopy: onCopy, onReveal: onReveal, onRename: { renaming = true })
             Menu("加入任务", systemImage: "checklist") {
                 TaskMenuItems(session: session, tasks: tasks, actions: taskActions)
             }
         }
     }
 
-    /// Under the title: what was asked, then where that stands. A closed session keeps
-    /// to its name; its last round is old news.
-    @ViewBuilder private var lines: some View {
+    /// Lamp, then the title line, summary and meta. The field is 6 pt taller than the
+    /// title, so the padding gives those back and the row keeps its height while renaming.
+    private func rowContent<Title: View>(@ViewBuilder title: () -> Title) -> some View {
+        let padding: CGFloat = (compact ? 8 : 10) - (renaming ? 3 : 0)
+        return HStack(alignment: .top, spacing: BellLayout.rowGap) {
+            // Centred on the title's line, whatever stands under it.
+            LampView(kind: kind).padding(.top, renaming ? 5 : 2)
+            VStack(alignment: .leading, spacing: 3) {
+                title()
+                summary
+                meta
+            }
+        }
+        .padding(.leading, BellLayout.rowLeading)
+        .padding(.vertical, padding)
+        .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    /// Under the title, one line: how the latest round stands, or what was asked when
+    /// that says more. A closed session keeps to its name; its last round is old news.
+    @ViewBuilder private var summary: some View {
         if let feedback {
             Label(feedback, systemImage: "checkmark")
                 .labelStyle(TightLabelStyle())
@@ -124,18 +145,65 @@ struct SessionRowView: View {
                 .font(.rowDetail)
                 .foregroundStyle(.secondary)
         } else if !compact {
-            if let asked = Copy.asked(session) {
-                (Text("你：").foregroundStyle(.tertiary) + Text(asked))
-                    .font(.rowDetail)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            let summary = Copy.summary(session)
+            Group {
+                if summary.asked {
+                    Text("你：").foregroundStyle(.tertiary) + Text(summary.text)
+                } else {
+                    Text(summary.text)
+                }
             }
-            Text(Copy.standing(session))
-                .font(.rowDetail)
-                .foregroundStyle(kind == .waiting ? Color.amberText : .secondary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+            .font(.rowDetail)
+            .foregroundStyle(kind == .waiting ? Color.amberText : .secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
         }
+    }
+
+    /// Project, branch and task, each only when there is one; no line at all otherwise.
+    @ViewBuilder private var meta: some View {
+        let project = showProject ? session.project.name : nil
+        if project != nil || rowBranch != nil || task != nil {
+            HStack(spacing: 6) {
+                if let project {
+                    MetaChip(text: project, symbol: "folder")
+                }
+                if let rowBranch {
+                    MetaChip(text: rowBranch, symbol: "arrow.triangle.branch", monospaced: true)
+                        .layoutPriority(1)
+                }
+                if let task {
+                    MetaChip(text: task.title, symbol: "checklist", tint: .bellAccent)
+                }
+            }
+            .padding(.top, 2)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+/// A small tag in the row's meta line. Neutral unless it is the task, the one tag in the
+/// accent; never the lamps' colours.
+private struct MetaChip: View {
+    let text: String
+    let symbol: String
+    var tint: Color?
+    var monospaced = false
+
+    var body: some View {
+        Label {
+            Text(text).lineLimit(1).truncationMode(.middle)
+        } icon: {
+            Image(systemName: symbol).font(.system(size: 9.5))
+        }
+        .labelStyle(TightLabelStyle())
+        .font(monospaced ? .system(size: 11, design: .monospaced) : .rowMeta)
+        .foregroundStyle(tint ?? .secondary)
+        .padding(.horizontal, 6)
+        .frame(height: 18)
+        .background((tint ?? .primary).opacity(tint == nil ? 0.05 : 0.1),
+                    in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .help(text)
     }
 }
 
@@ -144,6 +212,7 @@ struct SessionCommands: View {
     var onActivate: (() -> Void)? = nil
     var onCopy: (() -> Void)? = nil
     let onReveal: () -> Void
+    var onRename: (() -> Void)? = nil
 
     var body: some View {
         if let onActivate {
@@ -153,6 +222,9 @@ struct SessionCommands: View {
             Button("复制恢复命令", systemImage: "doc.on.doc", action: onCopy)
         }
         Button("在访达中显示", systemImage: "folder", action: onReveal)
+        if let onRename {
+            Button("重命名…", systemImage: "pencil", action: onRename)
+        }
         if let onDetail {
             Divider()
             Button("查看详情", systemImage: "info.circle", action: onDetail)

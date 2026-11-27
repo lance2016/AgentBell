@@ -10,7 +10,7 @@ struct DesktopSettings: View {
             Section("桌面图标") {
                 Toggle(isOn: $desktopIcon) {
                     Text("显示桌面图标")
-                    Text("可以拖到任意位置，点一下打开会话窗口")
+                    Text("拖到屏幕左右边缘可贴边，点一下打开会话窗口")
                 }
                 .disabled(desktopIcon && !menuBarIcon)
                 desktopSizeRow

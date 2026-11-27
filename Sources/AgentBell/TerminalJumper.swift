@@ -68,9 +68,12 @@ enum TerminalJumper {
     }
 
     private static let log = Logger(subsystem: "com.agentbell.AgentBell", category: "jump")
+    private static var resuming: Set<String> = []
 
     static func launchClaude(in app: TerminalApp, executable: URL, directory: String,
-                             beforePrompt: () -> Void) async throws {
+                             resumeSessionID: String? = nil, beforePrompt: () -> Void) async throws {
+        if let resumeSessionID, !resuming.insert(resumeSessionID).inserted { return }
+        defer { if let resumeSessionID { resuming.remove(resumeSessionID) } }
         guard app.isInstalled else { throw LaunchError.missing(app) }
 
         let permission = AutomationPermission.of(app)
@@ -81,7 +84,7 @@ enum TerminalJumper {
         do {
             output = try await ProcessRunner.run(
                 URL(fileURLWithPath: "/usr/bin/osascript"),
-                arguments: ["-e", app.launchScript, directory, executable.path],
+                arguments: ["-e", app.launchScript, directory, executable.path] + (resumeSessionID.map { [$0] } ?? []),
                 timeout: 60
             )
         } catch {

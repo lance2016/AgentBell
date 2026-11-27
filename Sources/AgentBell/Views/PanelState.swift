@@ -83,6 +83,8 @@ final class PanelState {
     }
     /// The session whose detail is showing instead of the list.
     var detailID: String?
+    /// The session whose detail has its title open for editing.
+    var renamingID: String?
     var terminalFallback: (sessionID: String, pid: pid_t?)?
     /// The project the sidebar shows; the first one when nil or gone.
     var pickedProject: String?

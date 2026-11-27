@@ -14,8 +14,6 @@ struct TaskDetailView: View {
     let onDelete: () -> Void
 
     @FocusState private var titleFocused: Bool
-    /// The workspace whose resume command was just copied.
-    @ViewState private var copiedCWD: String?
 
     private var tasks: TaskStore { store.tasks }
 
@@ -75,14 +73,20 @@ struct TaskDetailView: View {
                     .accessibilityLabel("任务标题")
                 moreMenu
             }
-            Picker("状态", selection: status) {
-                ForEach(DevTask.Status.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .accessibilityLabel("任务状态")
+            statusMenu
         }
+    }
+
+    /// A pop-up button, which HIG gives to a flat list of mutually exclusive states: it
+    /// shows the current one and reads as a value, not as commands (a pull-down `Menu`)
+    /// or as switching views (a segmented control, like the session detail's tabs).
+    private var statusMenu: some View {
+        Picker("状态", selection: status) {
+            ForEach(DevTask.Status.allCases, id: \.self) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.menu)
+        .fixedSize()
+        .help("任务状态")
     }
 
     private var moreMenu: some View {
@@ -101,7 +105,8 @@ struct TaskDetailView: View {
 
     // MARK: - Next step and note
 
-    /// The one line to read when coming back, set off by an accent bar.
+    /// The one line to read when coming back, set off by an accent bar. Not green: green
+    /// means done.
     private var nextStep: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("下一步").font(.system(size: 15, weight: .semibold)).accessibilityAddTraits(.isHeader)
@@ -113,7 +118,7 @@ struct TaskDetailView: View {
         }
         .padding(.leading, 12)
         .overlay(alignment: .leading) {
-            Capsule().fill(Color.greenLamp.opacity(0.8)).frame(width: 3)
+            Capsule().fill(Color.bellAccent).frame(width: 3)
         }
     }
 
@@ -142,6 +147,7 @@ struct TaskDetailView: View {
             .frame(height: 42)
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isHeader)
+            if !task.workspaces.isEmpty { CardDivider() }
             if task.workspaces.isEmpty {
                 Text("还没有关联工作区。在会话详情里点「加入任务」，会带上项目、目录、分支和会话。")
                     .font(.rowDetail)
@@ -189,7 +195,7 @@ struct TaskDetailView: View {
             if let live {
                 Button("回到终端", systemImage: "terminal") { actions.activate(live) }
             }
-            Button("复制恢复命令", systemImage: "doc.on.doc") { copyResume(workspace) }
+            Button("复制恢复命令", systemImage: "doc.on.doc") { copy(workspace.resumeCommand) }
             Button("复制目录路径", systemImage: "folder") { copy(workspace.cwd) }
             Button("在访达中显示", systemImage: "folder") { actions.reveal(workspace.cwd) }
             Divider()
@@ -236,12 +242,9 @@ struct TaskDetailView: View {
             Button("回到终端", systemImage: "terminal") { actions.activate(live) }
                 .buttonStyle(.bordered)
         } else {
-            let copied = copiedCWD == workspace.cwd
-            Button(copied ? "已复制" : "复制恢复命令", systemImage: copied ? "checkmark" : "doc.on.doc") {
-                copyResume(workspace)
-            }
-            .buttonStyle(.bordered)
-            .help(workspace.resumeCommand)
+            Button("继续工作", systemImage: "terminal") { actions.resume(workspace) }
+                .buttonStyle(.bordered)
+                .help("在原工作区恢复 Claude Code 会话")
         }
     }
 
@@ -254,15 +257,6 @@ struct TaskDetailView: View {
         .labelStyle(TightLabelStyle())
         .font(.system(size: 12, design: .monospaced))
         .foregroundStyle(.secondary)
-    }
-
-    private func copyResume(_ workspace: TaskWorkspace) {
-        copy(workspace.resumeCommand)
-        copiedCWD = workspace.cwd
-        Task {
-            try? await Task.sleep(for: .seconds(1.5))
-            if copiedCWD == workspace.cwd { copiedCWD = nil }
-        }
     }
 
     private func copy(_ text: String) {

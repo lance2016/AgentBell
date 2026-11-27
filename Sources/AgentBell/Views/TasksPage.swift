@@ -9,6 +9,7 @@ struct TaskActions {
     let open: (UUID) -> Void
     /// Back to a workspace's session while it still runs.
     let activate: (Session) -> Void
+    let resume: (TaskWorkspace) -> Void
     let reveal: (String) -> Void
 }
 

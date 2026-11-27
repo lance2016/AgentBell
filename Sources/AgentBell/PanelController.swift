@@ -33,6 +33,7 @@ final class PanelController {
     /// Dock icon while it is open.
     var onVisibilityChange: ((Bool) -> Void)?
     var openSettings: (() -> Void)?
+    var openReview: (() -> Void)?
     /// Where the panel hangs from when it opens without a click on the status item.
     var defaultAnchor: (() -> NSRect?)?
 
@@ -248,6 +249,10 @@ final class PanelController {
             revealProject: { [weak self] in self?.revealDirectory($0) },
             launchInProject: { [weak self] in self?.launchClaude(project: $0) },
             launchInFolder: { [weak self] in self?.launchClaude(project: nil) },
+            openReview: { [weak self] in
+                self?.openReview?()
+                self?.dismiss()
+            },
             chooseClaude: { [weak self] in
                 guard let self else { return }
                 self.dismiss()
@@ -277,6 +282,7 @@ final class PanelController {
                 },
                 open: { [weak self] in self?.state.openTask($0) },
                 activate: { [weak self] in self?.activate($0) },
+                resume: { [weak self] in self?.resume($0) },
                 reveal: { [weak self] in self?.revealDirectory($0) }
             )
         )
@@ -311,29 +317,89 @@ final class PanelController {
                 directory = chooseLaunchFolder()
             }
             guard let directory else { return }
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: directory, isDirectory: &isDirectory),
-                  isDirectory.boolValue
-            else {
-                launchAlert("选定的工作目录已移除，请重新选择。")
-                return
-            }
-            do {
-                try await TerminalJumper.launchClaude(in: .current, executable: executable, directory: directory) { dismiss() }
-                dismiss()
-                store.pollNow()
-                // The terminal can open before Claude registers with its session list.
-                Task { [store] in
-                    try? await Task.sleep(for: .seconds(2))
-                    store.pollNow()
-                }
-            } catch {
-                launchAlert(error.localizedDescription)
-            }
+            await launchClaude(executable: executable, directory: directory)
         }
     }
 
-    private func chooseCheckout(_ checkouts: [ProjectCheckout]) -> String? {
+    private func resume(_ workspace: TaskWorkspace) {
+        if let live = store.tracker.live[workspace.sessionID] {
+            activate(live)
+            return
+        }
+        guard launchTask == nil else { return }
+        launchTask = Task {
+            defer { launchTask = nil }
+            guard case .ready(let executable) = store.claude,
+                  FileManager.default.isExecutableFile(atPath: executable.path) else {
+                launchAlert("请在 AgentBell 设置中选择可用的 Claude Code 可执行文件。")
+                return
+            }
+
+            let original = ProjectInfo.lookup(cwd: workspace.cwd)
+            var directory = workspace.cwd
+            if !Self.isDirectory(directory) || original.root != workspace.projectRoot || original.branch != workspace.branch {
+                let checkouts = await ProjectCheckout.list(root: workspace.projectRoot)
+                    .sorted { ($0.branch == workspace.branch ? 0 : 1) < ($1.branch == workspace.branch ? 0 : 1) }
+                guard isShown else { return }
+                let reason = "原工作目录已移除，或当前分支与保存时不同。请选择恢复会话的目录。AgentBell 不会切换分支。"
+                if checkouts.isEmpty {
+                    let alert = NSAlert()
+                    alert.messageText = "选择恢复目录"
+                    alert.informativeText = reason
+                    alert.addButton(withTitle: "选择文件夹…")
+                    alert.addButton(withTitle: "取消")
+                    dismiss()
+                    NSApp.activate()
+                    guard alert.runModal() == .alertFirstButtonReturn,
+                          let selected = chooseLaunchFolder(prompt: "恢复会话") else { return }
+                    directory = selected
+                } else {
+                    guard let selected = chooseCheckout(
+                        checkouts, title: "继续工作", message: reason, button: "恢复会话"
+                    ) else { return }
+                    directory = selected
+                }
+            }
+            if let live = store.tracker.live[workspace.sessionID] {
+                activate(live)
+                return
+            }
+            await launchClaude(executable: executable, directory: directory, resumeSessionID: workspace.sessionID)
+        }
+    }
+
+    private static func isDirectory(_ path: String) -> Bool {
+        var directory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &directory) && directory.boolValue
+    }
+
+    private func launchClaude(executable: URL, directory: String, resumeSessionID: String? = nil) async {
+        guard Self.isDirectory(directory) else {
+            launchAlert("选定的工作目录已移除，请重新选择。")
+            return
+        }
+        do {
+            try await TerminalJumper.launchClaude(
+                in: .current, executable: executable, directory: directory, resumeSessionID: resumeSessionID
+            ) { dismiss() }
+            dismiss()
+            store.pollNow()
+            // The terminal can open before Claude registers with its session list.
+            Task { [store] in
+                try? await Task.sleep(for: .seconds(2))
+                store.pollNow()
+            }
+        } catch {
+            launchAlert(error.localizedDescription)
+        }
+    }
+
+    private func chooseCheckout(
+        _ checkouts: [ProjectCheckout],
+        title: String = "新建会话",
+        message: String = "选择已有的工作目录。会话将在该目录中的分支上启动。",
+        button: String = "打开 Claude"
+    ) -> String? {
         let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 400, height: 28))
         for checkout in checkouts {
             let path = (checkout.path as NSString).abbreviatingWithTildeInPath
@@ -343,10 +409,10 @@ final class PanelController {
         }
         picker.selectItem(at: 0)
         let alert = NSAlert()
-        alert.messageText = "新建会话"
-        alert.informativeText = "选择已有的工作目录。会话将在该目录中的分支上启动。"
+        alert.messageText = title
+        alert.informativeText = message
         alert.accessoryView = picker
-        alert.addButton(withTitle: "打开 Claude")
+        alert.addButton(withTitle: button)
         alert.addButton(withTitle: "取消")
         dismiss()
         NSApp.activate()
@@ -355,11 +421,11 @@ final class PanelController {
         return checkouts[picker.indexOfSelectedItem].path
     }
 
-    private func chooseLaunchFolder() -> String? {
+    private func chooseLaunchFolder(prompt: String = "打开 Claude") -> String? {
         dismiss()
         let picker = NSOpenPanel()
         picker.title = "选择 Claude 会话的工作目录"
-        picker.prompt = "打开 Claude"
+        picker.prompt = prompt
         picker.canChooseFiles = false
         picker.canChooseDirectories = true
         picker.allowsMultipleSelection = false
@@ -492,6 +558,7 @@ final class PanelController {
         case (124, false, _) where sidebar: state.moveProject(by: 1, store)
         // Esc leaves the detail first, then puts the popover away. A window stays: it
         // closes as windows do, with ⌘W.
+        case (53, _, _) where state.renamingID != nil: state.renamingID = nil
         case (53, _, _) where state.detailID != nil: state.detailID = nil
         case (53, _, _) where state.addingTask: state.addingTask = false
         case (53, _, _) where state.tasksVisible && state.tasksNarrow && state.taskID != nil: state.taskID = nil

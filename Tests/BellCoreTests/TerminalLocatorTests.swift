@@ -69,6 +69,8 @@ struct TerminalAppTests {
     @Test func scriptsTakeTheirInputAsArguments() {
         for app in TerminalApp.allCases {
             #expect(app.launchScript.contains("item 1 of argv"))
+            #expect(app.launchScript.contains("quoted form of claudeExecutable"))
+            #expect(app.launchScript.contains(#"if (count of argv) > 2 then set claudeCommand to claudeCommand & " --resume " & quoted form of (item 3 of argv)"#))
             #expect(app.focusScript.contains("item 1 of argv"))
             #expect(app.focusScript.contains(app.bundleID))
             #expect(app.launchScript.contains(app.bundleID))
@@ -83,7 +85,7 @@ struct TerminalAppTests {
     @Test func ghosttyTypesClaudeIntoTheUsersShell() {
         let script = GhosttyScript.launch
         #expect(!script.contains("set command of"))
-        #expect(script.contains("set initial input of cfg to (quoted form of claudeExecutable) & linefeed"))
+        #expect(script.contains("set initial input of cfg to claudeCommand & linefeed"))
         #expect(script.contains("set initial working directory of cfg to projectDirectory"))
     }
 }

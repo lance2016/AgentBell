@@ -58,6 +58,23 @@ public enum Copy {
         return session.state == .completed && !session.isEnded ? "\(word)：\(line)" : line
     }
 
+    public struct Summary: Sendable, Equatable {
+        public let text: String
+        /// The text is what was asked, so the row puts "你：" in front.
+        public let asked: Bool
+    }
+
+    /// The row's one line under the title: how the latest round stands. When that is only
+    /// the state's word and nothing needs you, what was asked says more.
+    public static func summary(_ session: Session) -> Summary {
+        let line = standing(session)
+        let needsYou = session.state == .waiting || session.state == .failed
+        if line == statusWord(session), !needsYou, let asked = asked(session) {
+            return Summary(text: asked, asked: true)
+        }
+        return Summary(text: line, asked: false)
+    }
+
     private static func lastPrompt(_ session: Session) -> String? {
         session.heardTurns.last?.prompt ?? session.transcript?.turns.last?.prompt ?? session.transcript?.lastPrompt
     }

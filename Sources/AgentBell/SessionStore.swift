@@ -68,6 +68,24 @@ final class SessionStore {
         UserDefaults.standard.set(pinnedProjects, forKey: Self.pinnedProjectsKey)
     }
 
+    /// Names a session in AgentBell only; Claude Code has no way to be told. The name is
+    /// the user's own writing, so it is on disk before it shows: when saving fails, the
+    /// session keeps its old name and the error goes back to the field.
+    func rename(_ session: Session, to title: String) throws {
+        var next = tracker
+        next.rename(session.id, to: title)
+        guard next.titles != tracker.titles else { return }
+        do {
+            try SavedState.save(next.titles, to: SavedState.titlesFile)
+        } catch {
+            log.error("saving session names failed: \(String(describing: error), privacy: .public)")
+            throw error
+        }
+        let before = tracker
+        tracker = next
+        save(ifChangedFrom: before)
+    }
+
     func workspaceSnapshot(cwd: String, force: Bool) async -> GitSnapshot? {
         if let running = gitReads[cwd] { return await running.value }
         let now = Date()
@@ -85,7 +103,8 @@ final class SessionStore {
         tasks.load()
         tracker.restore(
             SavedState.load([String: HookState].self, from: SavedState.roundsFile) ?? [:],
-            sessions: SavedState.load([Session].self, from: SavedState.sessionsFile) ?? []
+            sessions: SavedState.load([Session].self, from: SavedState.sessionsFile) ?? [],
+            titles: SavedState.load([String: String].self, from: SavedState.titlesFile) ?? [:]
         )
         hooks.start { [weak self] event in self?.applyHook(event) }
         pollNow()

@@ -39,6 +39,10 @@ public struct BubbleQueue: Equatable, Sendable {
     }
 }
 
+public enum DesktopEdge: String, CaseIterable, Sendable {
+    case left, right
+}
+
 /// Where the desktop icon and its bubbles sit, in screen coordinates (origin bottom left).
 public enum DesktopPlacement {
     static let margin: CGFloat = 24
@@ -57,6 +61,47 @@ public enum DesktopPlacement {
         let maxY = max(visible.minY, visible.maxY - size.height)
         return CGRect(x: min(max(x, visible.minX), maxX), y: min(max(y, visible.minY), maxY),
                       width: size.width, height: size.height)
+    }
+
+    /// Called on drop. A side occupied by the Dock or connected to another display
+    /// at the mascot's height is not a place to tuck the icon.
+    public static func dockingEdge(
+        for icon: CGRect, screen: CGRect, visible: CGRect, neighbors: [CGRect]
+    ) -> DesktopEdge? {
+        let snapDistance: CGFloat = 12
+        return DesktopEdge.allCases.first { edge in
+            let close = switch edge {
+            case .left: icon.minX <= visible.minX + snapDistance && icon.maxX > visible.minX
+            case .right: icon.maxX >= visible.maxX - snapDistance && icon.minX < visible.maxX
+            }
+            return close && canDock(edge, icon: icon, screen: screen, visible: visible, neighbors: neighbors)
+        }
+    }
+
+    public static func canDock(
+        _ edge: DesktopEdge, icon: CGRect, screen: CGRect, visible: CGRect, neighbors: [CGRect]
+    ) -> Bool {
+        let x = edge == .left ? screen.minX : screen.maxX
+        let usableX = edge == .left ? visible.minX : visible.maxX
+        guard abs(x - usableX) <= 1 else { return false }
+        return !neighbors.contains { neighbor in
+            let facingX = edge == .left ? neighbor.maxX : neighbor.minX
+            return abs(x - facingX) <= 1 && neighbor.minY < icon.maxY && neighbor.maxY > icon.minY
+        }
+    }
+
+    public static func dockedIcon(
+        _ edge: DesktopEdge, size: CGFloat, y: CGFloat, visible: CGRect,
+        expanded: Bool, needsAttention: Bool
+    ) -> CGRect {
+        let fraction: CGFloat = expanded ? 1 : (needsAttention ? 0.66 : 0.48)
+        let width = min((size * fraction).rounded(.up), visible.width)
+        let height = min(size, visible.height)
+        return CGRect(
+            x: edge == .left ? visible.minX : visible.maxX - width,
+            y: min(max(y, visible.minY), visible.maxY - height),
+            width: width, height: height
+        )
     }
 
     /// Eyes look towards nearby points and gradually return to center at the edge of range.

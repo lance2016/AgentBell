@@ -162,10 +162,15 @@ struct GeneralSettings: View {
     @AppStorage(Entry.desktopKey) private var desktopIcon = true
     @AppStorage(TerminalApp.defaultsKey) private var storedTerminal = ""
 
+    @ViewState private var showsDiagnostics = false
+
     var body: some View {
         Form {
             Section("Claude Code") {
                 connectionRow
+                LabeledContent("连接诊断") {
+                    Button("检查…") { showsDiagnostics = true }
+                }
                 // Notifications are what the hooks are for: say so, then let the user ask.
                 if store.hooks.isReady && store.notifier.permission == .notAsked {
                     LabeledContent {
@@ -220,6 +225,9 @@ struct GeneralSettings: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showsDiagnostics) {
+            ConnectionDiagnostics(model: model, store: store)
         }
     }
 
@@ -502,7 +510,7 @@ struct AboutSettings: View {
                 }
             }
             Section("数据") {
-                Text("只在本机：读 claude agents 的列表和会话记录的末尾，钩子事件走本机的 socket，什么都不上传")
+                Text("会话状态和钩子事件只在本机处理。发起代码审查时，所选代码差异会交给你配置的 Claude Code 模型。")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 LabeledContent("数据文件夹") {

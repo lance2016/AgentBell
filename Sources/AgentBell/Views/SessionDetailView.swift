@@ -16,6 +16,9 @@ struct SessionDetailView: View {
     let onActivate: () -> Void
     let onCopy: () -> Void
     let onReveal: () -> Void
+    /// The title is open for editing, from the pencil beside it.
+    @Binding var renaming: Bool
+    let onRename: (String) throws -> Void
     let tasks: TaskStore
     let taskActions: TaskActions
 
@@ -110,12 +113,21 @@ struct SessionDetailView: View {
     private var heading: some View {
         let kind = LampKind(session)
         return VStack(alignment: .leading, spacing: 6) {
-            Text(session.title)
-                .font(.system(size: 17, weight: .semibold))
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-                .accessibilityAddTraits(.isHeader)
+            if renaming {
+                RenameField(title: session.title, size: .heading,
+                            onSave: { try onRename($0); renaming = false },
+                            onCancel: { renaming = false })
+            } else {
+                HStack(alignment: .center, spacing: 6) {
+                    Text(session.title)
+                        .font(.system(size: 17, weight: .semibold))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .accessibilityAddTraits(.isHeader)
+                    RenameButton(title: session.title) { renaming = true }
+                }
+            }
             HStack(spacing: 6) {
                 LampView(kind: kind)
                 Text(statusPending ? "会话状态待确认" : Copy.statusWord(session))
@@ -174,7 +186,7 @@ struct SessionDetailView: View {
         }
     }
 
-    /// Return presses it. A default button is drawn in the accent colour even when only
+    /// Return presses it, except while renaming. A default button is drawn in the accent colour even when only
     /// bordered, so it is prominent with a neutral tint instead.
     private var primaryButton: some View {
         Button(session.isEnded ? "复制恢复命令" : "回到终端",
@@ -182,7 +194,8 @@ struct SessionDetailView: View {
                action: session.isEnded ? onCopy : onActivate)
             .buttonStyle(.borderedProminent)
             .tint(.mainButton(colorScheme))
-            .keyboardShortcut(.defaultAction)
+            // While the title is being edited, Return keeps the name instead.
+            .keyboardShortcut(renaming ? nil : .defaultAction)
     }
 
     /// Takes this session's project, directory, branch and id into a new or open task.
@@ -810,3 +823,4 @@ private struct TurnCard: View {
             ?? AttributedString(text)
     }
 }
+

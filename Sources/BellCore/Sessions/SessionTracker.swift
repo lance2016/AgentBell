@@ -18,6 +18,9 @@ public struct SessionTracker: Sendable, Equatable {
     public private(set) var live: [String: Session] = [:]
     /// Ended sessions, most recently ended first.
     public private(set) var recent: [Session] = []
+    /// Names given in AgentBell, by session id. Kept apart from the rows, so a name outlives
+    /// its session leaving the list and comes back when it is resumed.
+    public private(set) var titles: [String: String] = [:]
     /// What hooks say about each session's round.
     public private(set) var rounds: [String: HookState] = [:]
     /// Rounds saved by an earlier run, not yet checked against their transcripts.
@@ -35,12 +38,15 @@ public struct SessionTracker: Sendable, Equatable {
     /// lists its session: if the transcript moved on while nobody listened, it is dropped.
     /// Saved sessions all start out in `recent`; the first poll takes back the ones still
     /// open. One that closed meanwhile counts as closed when its transcript last changed.
-    public mutating func restore(_ saved: [String: HookState], sessions: [Session] = []) {
+    public mutating func restore(_ saved: [String: HookState], sessions: [Session] = [],
+                                 titles: [String: String] = [:]) {
         rounds = saved
         unverified = Set(saved.keys)
+        self.titles = titles
         recent = sessions
             .map { session -> Session in
                 var copy = session
+                copy.alias = titles[session.id]
                 if copy.endedAt == nil { copy.endedAt = copy.transcript?.modifiedAt ?? copy.stateSince }
                 return copy
             }
@@ -128,12 +134,26 @@ public struct SessionTracker: Sendable, Equatable {
         unverified.formIntersection(rounds.keys)
     }
 
+    /// Names a session in AgentBell. A blank name, or the session's own title typed back,
+    /// drops the name, so the session follows its own title again.
+    public mutating func rename(_ id: String, to title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        var own = live[id] ?? recent.first { $0.id == id }
+        own?.alias = nil
+        titles[id] = trimmed.isEmpty || trimmed == own?.title ? nil : trimmed
+        live[id]?.alias = titles[id]
+        if let index = recent.firstIndex(where: { $0.id == id }) {
+            recent[index].alias = titles[id]
+        }
+    }
+
     public mutating func invalidatePendingClosures() {
         firstMissingAt.removeAll()
     }
 
     /// What the row shows: the hooks' account when there is one, else polling's.
     private func show(_ session: inout Session) {
+        session.alias = titles[session.id]
         if let round = rounds[session.id] {
             session.state = round.turn
             session.stateSince = round.shownSince

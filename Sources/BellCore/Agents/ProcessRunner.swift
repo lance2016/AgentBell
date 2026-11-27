@@ -18,12 +18,14 @@ public enum ProcessRunner {
         _ executable: URL,
         arguments: [String],
         environment: [String: String]? = nil,
-        timeout: TimeInterval = 10
+        timeout: TimeInterval = 10,
+        currentDirectory: URL? = nil,
+        inputFile: URL? = nil
     ) async throws -> ProcessOutput {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 continuation.resume(with: Result {
-                    try runBlocking(executable, arguments, environment, timeout)
+                    try runBlocking(executable, arguments, environment, timeout, currentDirectory, inputFile)
                 })
             }
         }
@@ -33,17 +35,22 @@ public enum ProcessRunner {
         _ executable: URL,
         _ arguments: [String],
         _ environment: [String: String]?,
-        _ timeout: TimeInterval
+        _ timeout: TimeInterval,
+        _ currentDirectory: URL?,
+        _ inputFile: URL?
     ) throws -> ProcessOutput {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
+        process.currentDirectoryURL = currentDirectory
         if let environment { process.environment = environment }
         let outPipe = Pipe()
         let errPipe = Pipe()
         process.standardOutput = outPipe
         process.standardError = errPipe
-        process.standardInput = FileHandle.nullDevice
+        let input = try inputFile.map { try FileHandle(forReadingFrom: $0) }
+        defer { try? input?.close() }
+        process.standardInput = input ?? FileHandle.nullDevice
 
         do {
             try process.run()

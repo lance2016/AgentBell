@@ -67,6 +67,38 @@ struct DesktopPlacementTests {
         #expect(resized == CGRect(x: -128, y: 772, width: 128, height: 128))
     }
 
+    @Test func onlyNearbyOuterSidesAcceptDocking() {
+        let left = CGRect(x: 10, y: 300, width: 88, height: 88)
+        let right = CGRect(x: 1345, y: 300, width: 88, height: 88)
+        let bottom = CGRect(x: 500, y: 0, width: 88, height: 88)
+        #expect(DesktopPlacement.dockingEdge(for: left, screen: screen, visible: screen, neighbors: []) == .left)
+        #expect(DesktopPlacement.dockingEdge(for: right, screen: screen, visible: screen, neighbors: []) == .right)
+        #expect(DesktopPlacement.dockingEdge(for: bottom, screen: screen, visible: screen, neighbors: []) == nil)
+    }
+
+    @Test func leavesDisplaySeamsAndTheSideDockFree() {
+        let icon = CGRect(x: 1352, y: 250, width: 88, height: 88)
+        let neighbor = CGRect(x: 1440, y: 100, width: 1000, height: 500)
+        let higherNeighbor = neighbor.offsetBy(dx: 0, dy: 250)
+        #expect(DesktopPlacement.dockingEdge(for: icon, screen: screen, visible: screen, neighbors: [neighbor]) == nil)
+        #expect(DesktopPlacement.dockingEdge(for: icon, screen: screen, visible: screen, neighbors: [higherNeighbor]) == .right)
+        let dockOnRight = CGRect(x: 0, y: 0, width: 1380, height: 875)
+        #expect(!DesktopPlacement.canDock(.right, icon: icon, screen: screen, visible: dockOnRight, neighbors: []))
+    }
+
+    @Test func dockedFramesStayInsideAndExposeMoreForAttention() {
+        let visible = CGRect(x: -900, y: 50, width: 900, height: 850)
+        let peek = DesktopPlacement.dockedIcon(.left, size: 88, y: 40, visible: visible,
+                                               expanded: false, needsAttention: false)
+        let attention = DesktopPlacement.dockedIcon(.right, size: 88, y: 40, visible: visible,
+                                                    expanded: false, needsAttention: true)
+        let expanded = DesktopPlacement.dockedIcon(.right, size: 88, y: 40, visible: visible,
+                                                   expanded: true, needsAttention: true)
+        #expect(peek == CGRect(x: -900, y: 50, width: 43, height: 88))
+        #expect(attention == CGRect(x: -59, y: 50, width: 59, height: 88))
+        #expect(expanded == CGRect(x: -88, y: 50, width: 88, height: 88))
+    }
+
     @Test func mascotLooksOutsideItsWindowAndReturnsToCenter() {
         let icon = CGRect(x: 200, y: 300, width: 64, height: 64)
         let near = DesktopPlacement.mascotGaze(pointer: CGPoint(x: 280, y: 370), icon: icon)

@@ -17,10 +17,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         installMainMenu()
         let settings = SettingsWindowController(store: store)
+        let review = ReviewWindowController(store: store)
         let panel = PanelController(store: store, presentation: .popover)
         let window = PanelController(store: store, presentation: .window)
         panel.openSettings = { settings.show() }
         window.openSettings = { settings.show() }
+        panel.openReview = { review.show() }
+        window.openReview = { review.show() }
         // In the Dock and the app switcher while the window is open, as a regular app.
         window.onVisibilityChange = { shown in
             NSApp.setActivationPolicy(shown ? .regular : .accessory)

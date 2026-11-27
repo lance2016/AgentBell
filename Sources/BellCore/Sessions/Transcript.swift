@@ -5,6 +5,9 @@ import Foundation
 /// Nothing else is kept, and none of it is ever logged.
 public struct TranscriptSummary: Sendable, Equatable, Codable {
     public var title: String?
+    /// The name given with /rename, which `claude agents` stops reporting once the
+    /// session has closed.
+    public var customTitle: String?
     public var lastPrompt: String?
     public var lastReply: String?
     /// The last few rounds in the tail, oldest first, for the session's detail.
@@ -240,7 +243,8 @@ public enum Transcript {
         if cutAtStart, !lines.isEmpty { lines.removeFirst() }
         for line in lines {
             // Cheap filter before decoding: most lines are tool output.
-            let interesting = line.contains("\"ai-title\"") || line.contains("\"last-prompt\"")
+            let interesting = line.contains("\"ai-title\"") || line.contains("\"custom-title\"")
+                || line.contains("\"last-prompt\"")
                 || line.contains("\"assistant\"") || (line.contains("\"user\"") && !line.contains("\"tool_result\""))
             guard interesting,
                   let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
@@ -250,6 +254,10 @@ public enum Transcript {
             case "ai-title":
                 if let title = (object["aiTitle"] as? String).flatMap({ firstLine($0, limit: maxTitleChars) }) {
                     summary.title = title
+                }
+            case "custom-title":
+                if let title = (object["customTitle"] as? String).flatMap({ firstLine($0, limit: maxTitleChars) }) {
+                    summary.customTitle = title
                 }
             case "last-prompt":
                 if let prompt = (object["lastPrompt"] as? String).flatMap({ firstLine($0, limit: maxTitleChars) }) {

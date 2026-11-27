@@ -8,6 +8,8 @@ enum Palette {
     static let greenLamp = dynamic(light: 0x237844, dark: 0x64D69A)
     static let red = dynamic(light: 0xAD373D, dark: 0xFF9092)
     static let graphite = rgb(0x3A3A3C)
+    /// The one accent: a muted violet for what is picked and for a session's task tag.
+    static let accent = dynamic(light: 0x6B5FC7, dark: 0xB2A8F2)
 
     /// Cards: white on the content pane, a faint lift in dark mode.
     static let card = dynamic(light: (0xFFFFFF, 1), dark: (0xFFFFFF, 0.06))
@@ -46,6 +48,7 @@ extension Color {
     static let blueLamp = Color(nsColor: Palette.blueLamp)
     static let greenLamp = Color(nsColor: Palette.greenLamp)
     static let bellRed = Color(nsColor: Palette.red)
+    static let bellAccent = Color(nsColor: Palette.accent)
 
     /// The detail's main button: neutral, so the lamps stay the only colour. Picked per
     /// scheme because AppKit resolves a button's tint as light, and in dark mode draws the
@@ -58,9 +61,12 @@ extension Color {
 extension Font {
     static let panelHeader = Font.system(size: 15, weight: .semibold)
     static let rowTitle = Font.system(size: 13, weight: .medium)
+    /// A session's name: the loudest text in its row.
+    static let sessionTitle = Font.system(size: 13, weight: .semibold)
     static let rowDetail = Font.system(size: 12)
     static let groupName = Font.system(size: 13, weight: .semibold)
     static let rowTime = Font.system(size: 11).monospacedDigit()
+    static let rowMeta = Font.system(size: 11)
 }
 
 enum BellLayout {
@@ -90,8 +96,9 @@ enum BellLayout {
     static let contentFill = Color(nsColor: Palette.content)
     static let hairline = Color(nsColor: .separatorColor)
     static let waitingFill = Color.amberLamp.opacity(0.14)
-    /// The picked project and the keyboard's row: neutral, so green keeps meaning "done".
-    static let selectionFill = Color.primary.opacity(0.1)
+    /// The picked project and the keyboard's row: the muted accent, so green keeps
+    /// meaning "done".
+    static let selectionFill = Color.bellAccent.opacity(0.14)
     static let hoverOpacity = 0.075
 
     /// The sidebar needs room for its project column; the list reads best narrow.
