@@ -33,6 +33,39 @@ public enum ReviewRunner {
         let is_error: Bool
     }
 
+    public enum RepositoryChoice: Sendable, Equatable {
+        case use(URL)
+        case choose([URL])
+    }
+
+    /// Explicit MR links resolve by origin. A bare number or branch uses the default,
+    /// or asks the user if more than one project could be intended.
+    public static func chooseRepository(
+        for request: ReviewRequest, preferred: URL?, candidates: [URL]
+    ) async throws -> RepositoryChoice {
+        var seen: Set<String> = []
+        let repositories = ([preferred].compactMap { $0 } + candidates)
+            .map { $0.standardizedFileURL.resolvingSymlinksInPath() }
+            .filter {
+                seen.insert($0.path).inserted
+                    && FileManager.default.fileExists(atPath: $0.appendingPathComponent(".git").path)
+            }
+        let defaultRepository = preferred?.standardizedFileURL.resolvingSymlinksInPath()
+        guard case .mergeRequest(let project?, _) = request else {
+            if let defaultRepository, repositories.contains(defaultRepository) { return .use(defaultRepository) }
+            return repositories.count == 1 ? .use(repositories[0]) : .choose(repositories)
+        }
+
+        let git = try gitExecutable()
+        var matches: [URL] = []
+        for repository in repositories {
+            guard let origin = try? await originProject(git, repository), origin == project else { continue }
+            if repository == defaultRepository { return .use(repository) }
+            matches.append(repository)
+        }
+        return matches.count == 1 ? .use(matches[0]) : .choose(matches)
+    }
+
     public static func prepare(_ request: ReviewRequest, directory: URL, base: String) async throws -> ReviewPlan {
         try await prepare(request, directory: directory, base: base, glab: locateGlab())
     }
@@ -47,9 +80,8 @@ public enum ReviewRunner {
         let expectedSHA: String?
         switch request {
         case .mergeRequest(let requestedProject, let iid):
-            let remote = try await runGit(git, directory, ["config", "--get", "remote.origin.url"],
-                                          failure: "当前仓库缺少 origin，请选择该 MR 对应的本地仓库。")
-            guard let project = ReviewProject(remote: string(remote)), requestedProject.map({ $0 == project }) ?? true else {
+            guard let project = try await originProject(git, directory),
+                  requestedProject.map({ $0 == project }) ?? true else {
                 throw ReviewFailure("MR 与选中仓库的 origin 不匹配，请选择该 GitLab 项目的本地仓库。")
             }
             let metadata = try await loadMR(project, iid: iid, directory: directory, glab: glab)
@@ -207,6 +239,14 @@ public enum ReviewRunner {
             throw ReviewFailure("无法读取 MR。请检查公司网络和 glab 登录状态（\(project.host)）。")
         }
         return mr
+    }
+
+    private static func originProject(_ git: URL, _ directory: URL) async throws -> ReviewProject? {
+        let origin = try await runGit(
+            git, directory, ["config", "--get", "remote.origin.url"],
+            failure: "当前仓库缺少 origin，请选择该 MR 对应的本地仓库。"
+        )
+        return ReviewProject(remote: string(origin))
     }
 
     private static func gitExecutable() throws -> URL {
