@@ -7,6 +7,7 @@ enum Palette {
     static let blueLamp = dynamic(light: 0x1769C5, dark: 0x68ACFF)
     static let greenLamp = dynamic(light: 0x237844, dark: 0x64D69A)
     static let red = dynamic(light: 0xAD373D, dark: 0xFF9092)
+    static let graphite = rgb(0x3A3A3C)
 
     /// Cards: white on the content pane, a faint lift in dark mode.
     static let card = dynamic(light: (0xFFFFFF, 1), dark: (0xFFFFFF, 0.06))
@@ -45,6 +46,13 @@ extension Color {
     static let blueLamp = Color(nsColor: Palette.blueLamp)
     static let greenLamp = Color(nsColor: Palette.greenLamp)
     static let bellRed = Color(nsColor: Palette.red)
+
+    /// The detail's main button: neutral, so the lamps stay the only colour. Picked per
+    /// scheme because AppKit resolves a button's tint as light, and in dark mode draws the
+    /// fill at about half strength: white lands one step above the plain buttons there.
+    static func mainButton(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? .white : Color(nsColor: Palette.graphite)
+    }
 }
 
 extension Font {

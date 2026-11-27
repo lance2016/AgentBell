@@ -7,10 +7,14 @@ public struct ProjectInfo: Sendable, Equatable, Codable {
     /// group together.
     public let root: String
     public let branch: String?
+    /// The top folder of the linked worktree the session works in; nil in the main
+    /// checkout, a submodule, or outside a repository.
+    public var worktree: String?
 
-    public init(root: String, branch: String?) {
+    public init(root: String, branch: String?, worktree: String? = nil) {
         self.root = root
         self.branch = branch
+        self.worktree = worktree
     }
 
     public var name: String { (root as NSString).lastPathComponent }
@@ -31,7 +35,9 @@ public struct ProjectInfo: Sendable, Equatable, Codable {
                     return ProjectInfo(root: directory, branch: branch(gitDir: dotGit))
                 }
                 if let gitDir = linkedGitDir(dotGitFile: dotGit, in: directory) {
-                    return ProjectInfo(root: mainRoot(gitDir: gitDir) ?? directory, branch: branch(gitDir: gitDir))
+                    let main = mainRoot(gitDir: gitDir)
+                    return ProjectInfo(root: main ?? directory, branch: branch(gitDir: gitDir),
+                                       worktree: main == nil ? nil : directory)
                 }
             }
             let parent = (directory as NSString).deletingLastPathComponent

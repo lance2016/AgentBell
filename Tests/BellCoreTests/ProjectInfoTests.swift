@@ -50,6 +50,36 @@ struct ProjectInfoTests {
         let info = ProjectInfo.lookup(cwd: box.path("wt"))
         #expect(info.root == box.path("main"))
         #expect(info.branch == "fix")
+        #expect(info.worktree == box.path("wt"))
+    }
+
+    /// Claude Code puts its own worktrees inside the repository, under `.claude/worktrees`.
+    @Test func worktreeInsideMainRepositoryIsStillAWorktree() throws {
+        let box = try Sandbox()
+        try box.write("main/.git/HEAD", "ref: refs/heads/main\n")
+        try box.write("main/.git/worktrees/wt/HEAD", "ref: refs/heads/fix\n")
+        try box.write("main/.claude/worktrees/wt/.git", "gitdir: \(box.path("main/.git/worktrees/wt"))\n")
+        try box.mkdir("main/.claude/worktrees/wt/src")
+        let info = ProjectInfo.lookup(cwd: box.path("main/.claude/worktrees/wt/src"))
+        #expect(info.root == box.path("main"))
+        #expect(info.worktree == box.path("main/.claude/worktrees/wt"))
+    }
+
+    @Test func mainCheckoutAndSubmoduleAreNotWorktrees() throws {
+        let box = try Sandbox()
+        try box.write("main/.git/HEAD", "ref: refs/heads/main\n")
+        try box.write("main/.git/modules/lib/HEAD", "ref: refs/heads/main\n")
+        try box.write("main/lib/.git", "gitdir: \(box.path("main/.git/modules/lib"))\n")
+        #expect(ProjectInfo.lookup(cwd: box.path("main")).worktree == nil)
+        #expect(ProjectInfo.lookup(cwd: box.path("main/lib")).worktree == nil)
+    }
+
+    /// Sessions saved before the field existed still decode.
+    @Test func decodesWithoutWorktree() throws {
+        let json = Data(#"{"root":"/p","branch":"main"}"#.utf8)
+        let info = try JSONDecoder().decode(ProjectInfo.self, from: json)
+        #expect(info == ProjectInfo(root: "/p", branch: "main"))
+        #expect(info.worktree == nil)
     }
 
     @Test func ignoresRepositoryInHomeFolder() throws {

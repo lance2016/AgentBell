@@ -680,7 +680,7 @@ struct PanelView: View {
                     taskActions: actions.tasks
                 )
                 .padding(.horizontal, BellLayout.inset + 6)
-                .padding(.top, 4)
+                .padding(.top, 12)
                 .padding(.bottom, BellLayout.inset + 6)
             }
         }

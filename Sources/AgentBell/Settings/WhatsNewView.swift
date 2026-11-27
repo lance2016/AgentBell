@@ -1,8 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// What this version adds, opened from Settings › About. Update `items` with each release.
+/// What this version adds, opened from Settings › About. Update `items` with each release,
+/// and add the same version to CHANGELOG.md.
 enum ReleaseNotes {
+    /// Every version's notes, kept in the repository.
+    static let changelogURL = URL(string: "https://github.com/lance2016/AgentBell/blob/main/CHANGELOG.md")!
+
     struct Item: Identifiable {
         let symbol: String
         let title: String
@@ -11,18 +15,21 @@ enum ReleaseNotes {
     }
 
     static let items = [
-        Item(symbol: "keyboard",
-             title: "全局快捷键",
-             detail: "在任何地方按 ⌃⌥⌘J 回到等你最久的会话，⌃⌥⌘B 打开面板。可以在「设置 › 通用」里改。"),
-        Item(symbol: "bell.slash",
-             title: "正看着就不打扰",
-             detail: "会话停下来时，你正盯着它所在的终端，就不再弹通知和气泡。"),
-        Item(symbol: "square.on.square",
-             title: "同目录提醒",
-             detail: "两个会话在同一个目录里工作时，会话行会标出「同目录」，免得改动互相覆盖。"),
+        Item(symbol: "rectangle.grid.1x2",
+             title: "详情一页看全",
+             detail: "概览里有最近一轮、所在的开发任务、工作区和会话信息，不用再点开菜单才知道它在哪个任务里。"),
+        Item(symbol: "arrow.triangle.branch",
+             title: "认得出 worktree",
+             detail: "会话在 worktree 里工作时，详情的工作区会标出来，连同分支、改动文件数和最近提交。"),
+        Item(symbol: "circle.lefthalf.filled",
+             title: "更安静的详情",
+             detail: "按钮收成三个，不再用强调色；回复不再重复出现，页面上有颜色的只剩状态灯。"),
+        Item(symbol: "clock.arrow.circlepath",
+             title: "更新记录",
+             detail: "这一页底部可以打开全部版本的更新记录。"),
         Item(symbol: "wrench.and.screwdriver",
              title: "细节修正",
-             detail: "跳回「终端」时的高亮框不再超出窗口；置顶项目左边保留文件夹，图钉移到行尾。"),
+             detail: "用 Xcode 16.1 也能编译；请求通知权限更稳。"),
     ]
 }
 
@@ -61,6 +68,8 @@ struct WhatsNewView: View {
                     }
                     .accessibilityElement(children: .combine)
                 }
+                Link("查看全部版本的更新记录", destination: ReleaseNotes.changelogURL)
+                    .font(.system(size: 12))
             }
             if let code = Self.donationCode {
                 donation(code)

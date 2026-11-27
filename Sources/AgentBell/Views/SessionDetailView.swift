@@ -3,7 +3,8 @@ import BellCore
 import SwiftUI
 
 /// A session up close. On top, what it is, where it stands and the way back to it; under
-/// that, an overview, the conversation, the workspace's Git status, and session information.
+/// that, an overview (latest round, tasks, workspace, session facts), the conversation,
+/// and the workspace's changed files.
 struct SessionDetailView: View {
     let session: Session
     let now: Date
@@ -25,7 +26,7 @@ struct SessionDetailView: View {
     }
 
     private enum Tab: Hashable, CaseIterable {
-        case overview, conversation, changes, info
+        case overview, conversation, changes
     }
 
     @ViewState private var git = GitState.loading
@@ -39,25 +40,27 @@ struct SessionDetailView: View {
     @ViewState private var completedConversationRequest = 0
     /// "已复制会话 ID" and the like, from the ··· menu.
     @ViewState private var copied: String?
+    @Environment(\.colorScheme) private var colorScheme
 
-    /// The overview's share of each list; the tabs show them all.
-    private static let previewRounds = 3
     /// Conversation cards added on each load.
     private static let recentRounds = 6
     /// More than this and the list is a wall no one reads.
     private static let maxFiles = 200
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        // The heading and its buttons read as one block, the tabs start the next.
+        VStack(alignment: .leading, spacing: 0) {
             heading
-            actionBar
-            tabPicker
-            switch tab {
-            case .overview: overview
-            case .conversation: conversation
-            case .changes: workspaceChanges
-            case .info: infoCard
+            actionBar.padding(.top, 12)
+            tabRow.padding(.top, 20)
+            Group {
+                switch tab {
+                case .overview: overview
+                case .conversation: conversation
+                case .changes: workspaceChanges
+                }
             }
+            .padding(.top, 12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: conversationKey) {
@@ -65,7 +68,7 @@ struct SessionDetailView: View {
             await loadConversation()
         }
         .task(id: workspaceKey) {
-            guard tab == .changes || tab == .info else { return }
+            guard tab != .conversation else { return }
             git = .loading
             let request = workspaceRequest
             let result = await loadWorkspace(session.cwd, request != completedWorkspaceRequest)
@@ -81,7 +84,7 @@ struct SessionDetailView: View {
     }
 
     private var workspaceKey: String? {
-        guard tab == .changes || tab == .info else { return nil }
+        guard tab != .conversation else { return nil }
         return "\(session.cwd)|\(session.stateSince.timeIntervalSinceReferenceDate)|\(workspaceRequest)"
     }
 
@@ -106,7 +109,6 @@ struct SessionDetailView: View {
 
     private var heading: some View {
         let kind = LampKind(session)
-        let standing = Copy.standing(session)
         return VStack(alignment: .leading, spacing: 6) {
             Text(session.title)
                 .font(.system(size: 17, weight: .semibold))
@@ -119,14 +121,14 @@ struct SessionDetailView: View {
                 Text(statusPending ? "会话状态待确认" : Copy.statusWord(session))
                     .foregroundStyle(kind == .faint || kind == .interrupted ? Color.secondary : kind.color)
                     .fontWeight(.medium)
+                Text("·").foregroundStyle(.tertiary)
                 Text(now.relativeLabel(since: Copy.since(session)))
                     .foregroundStyle(.secondary)
             }
             .font(.system(size: 13))
             .lineLimit(1)
-            // What it is doing or waiting for; a word alone repeats the line above.
-            if standing != Copy.statusWord(session) {
-                Text(standing)
+            if let note = statusNote {
+                Text(note)
                     .font(.system(size: 13))
                     .foregroundStyle(kind == .waiting ? Color.amberText : .secondary)
                     .lineLimit(2)
@@ -135,104 +137,103 @@ struct SessionDetailView: View {
         }
     }
 
+    /// What it is doing, waiting for, or why it failed. Otherwise the standing line is
+    /// the last reply, which 最近一轮 already shows in full.
+    private var statusNote: String? {
+        switch LampKind(session) {
+        case .waiting, .working, .background, .failed:
+            let standing = Copy.standing(session)
+            return standing == Copy.statusWord(session) ? nil : standing
+        case .completed, .interrupted, .faint:
+            return nil
+        }
+    }
+
     // MARK: - Actions
 
+    /// One way back to the session, then everything else in two menus.
     private var actionBar: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                // Labelled buttons when they fit; Reveal, then 加入任务, shrink to icons when not.
-                ViewThatFits(in: .horizontal) {
-                    buttonRow(revealTitle: true, taskTitle: true)
-                    buttonRow(revealTitle: false, taskTitle: true)
-                    buttonRow(revealTitle: false, taskTitle: false)
-                }
-                Spacer(minLength: 0)
+                primaryButton
+                taskMenu
                 moreMenu
             }
+            .controlSize(.large)
+            .fixedSize()
             if terminalUnavailable {
-                HStack {
+                HStack(spacing: 4) {
                     Label(openTerminalApp == nil ? "找不到会话所在的终端" : "无法定位到会话窗口或分屏", systemImage: "exclamationmark.circle")
                         .foregroundStyle(.secondary)
                     if let openTerminalApp {
-                        Button("打开终端应用", action: openTerminalApp).buttonStyle(.link)
+                        quietButton("打开终端应用", action: openTerminalApp)
                     }
                 }
                 .font(.rowDetail)
             }
-            if let note = feedback ?? copied {
-                Label(note, systemImage: "checkmark")
-                    .font(.rowDetail)
-                    .foregroundStyle(.secondary)
-                    .accessibilityAddTraits(.updatesFrequently)
-            }
         }
     }
 
-    private func buttonRow(revealTitle: Bool, taskTitle: Bool) -> some View {
-        HStack(spacing: 8) {
-            if session.isEnded {
-                Button("复制恢复命令", systemImage: "doc.on.doc", action: onCopy)
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-            } else {
-                Button("回到终端", systemImage: "terminal", action: onActivate)
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
-                Button("复制恢复命令", systemImage: "doc.on.doc", action: onCopy)
-                    .buttonStyle(.bordered)
-            }
-            Button(action: onReveal) {
-                if revealTitle {
-                    Label("在访达中显示", systemImage: "folder")
-                } else {
-                    Image(systemName: "folder")
-                }
-            }
-            .buttonStyle(.bordered)
-            .help("在访达中显示")
-            .accessibilityLabel("在访达中显示")
-            taskMenu(titled: taskTitle)
-        }
-        .controlSize(.large)
-        .fixedSize()
+    /// Return presses it. A default button is drawn in the accent colour even when only
+    /// bordered, so it is prominent with a neutral tint instead.
+    private var primaryButton: some View {
+        Button(session.isEnded ? "复制恢复命令" : "回到终端",
+               systemImage: session.isEnded ? "doc.on.doc" : "terminal",
+               action: session.isEnded ? onCopy : onActivate)
+            .buttonStyle(.borderedProminent)
+            .tint(.mainButton(colorScheme))
+            .keyboardShortcut(.defaultAction)
     }
 
     /// Takes this session's project, directory, branch and id into a new or open task.
-    private func taskMenu(titled: Bool) -> some View {
+    private var taskMenu: some View {
         Menu {
             TaskMenuItems(session: session, tasks: tasks, actions: taskActions)
         } label: {
-            if titled {
-                Label("加入任务", systemImage: "checklist")
-            } else {
-                Image(systemName: "checklist")
-            }
+            Label("加入任务", systemImage: "checklist")
         }
         .menuStyle(.button)
+        // The pull-down arrow is a block in the accent colour, louder than the main button.
+        .menuIndicator(.hidden)
         .buttonStyle(.bordered)
-        .fixedSize()
         .help("新建任务或加入已有任务")
-        .accessibilityLabel("加入任务")
     }
 
-    /// Things to paste elsewhere: rarely needed, so out of the way.
+    /// Things to paste elsewhere and the folder: rarely needed, so out of the way.
     private var moreMenu: some View {
         Menu {
+            if !session.isEnded {
+                Button("复制恢复命令", systemImage: "doc.on.doc", action: onCopy)
+            }
+            Button("复制恢复命令（先进入目录）") {
+                copy(session.resumeInDirectoryCommand, note: "已复制恢复命令（先进入目录）")
+            }
+            Divider()
             Button("复制会话 ID") { copy(session.id, note: "已复制会话 ID") }
             Button("复制目录路径") { copy(session.cwd, note: "已复制目录路径") }
-            Button("复制在项目目录恢复的命令") {
-                copy(session.resumeInDirectoryCommand, note: "已复制在项目目录恢复的命令")
-            }
+            Divider()
+            Button("在访达中显示", systemImage: "folder", action: onReveal)
         } label: {
             Image(systemName: "ellipsis")
         }
         .menuStyle(.button)
         .menuIndicator(.hidden)
         .buttonStyle(.bordered)
-        .controlSize(.large)
-        .fixedSize()
         .help("更多")
         .accessibilityLabel("更多操作")
+    }
+
+    /// A text action in secondary grey, for refresh-and-load-more kinds of things: the
+    /// system's link style would paint them in the accent colour.
+    private func quietButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.rowDetail)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .frame(height: 24)
+        }
+        .buttonStyle(BellButtonStyle(radius: BellLayout.controlRadius))
     }
 
     private func copy(_ text: String, note: String) {
@@ -264,30 +265,47 @@ struct SessionDetailView: View {
         .fixedSize()
     }
 
+    /// The tabs, and at their right the note for a copy or a link: the room there is
+    /// free at any width, and nothing moves when the note comes and goes.
+    private var tabRow: some View {
+        HStack(spacing: 8) {
+            tabPicker
+            Spacer(minLength: 8)
+            if let note = feedback ?? copied {
+                Label(note, systemImage: "checkmark")
+                    .font(.rowDetail)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help(note)
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+        }
+    }
+
     private func title(_ item: Tab) -> String {
         switch item {
         case .overview: return "概览"
         case .conversation: return "对话"
-        case .changes: return "工作区改动"
-        case .info: return "信息"
+        case .changes: return "改动"
         }
     }
 
     // MARK: - Overview
 
     @ViewBuilder private var overview: some View {
-        VStack(spacing: 14) {
-            currentRound
-            recentCard
+        VStack(spacing: 12) {
+            latestRound
+            tasksCard
+            workspaceCard
+            sessionCard
         }
     }
 
-    /// The newest round: what you asked, and Claude's answer on a wash of the session's
-    /// state, the one coloured surface on the page. Where it stands is in the heading.
-    private var currentRound: some View {
-        let kind = LampKind(session)
+    /// The newest round: what you asked, and Claude's answer. Where the session stands is
+    /// in the heading, so the answer sits on a neutral fill.
+    private var latestRound: some View {
         let turn = rounds.first
-        return DetailCard(title: "当前这一轮", trailing: turn?.at.map { SessionDetailView.clock($0, now: now) }) {
+        return DetailCard(title: "最近一轮", trailing: turn?.at.map { SessionDetailView.clock($0, now: now) }) {
             if let turn {
                 VStack(alignment: .leading, spacing: 10) {
                     (Text("你：").foregroundStyle(.tertiary) + Text(turn.prompt))
@@ -295,19 +313,20 @@ struct SessionDetailView: View {
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
-                    answer(turn, kind: kind)
+                    answer(turn)
                 }
                 .padding(.horizontal, 14)
                 .padding(.bottom, 14)
+                CardDivider(leading: 14)
+                linkRow("查看全部对话") { tab = .conversation }
             } else {
                 placeholder("还没有对话记录")
             }
         }
     }
 
-    private func answer(_ turn: ConversationTurn, kind: LampKind) -> some View {
-        let tint = kind == .faint || kind == .interrupted ? Color.secondary : kind.color
-        return Group {
+    private func answer(_ turn: ConversationTurn) -> some View {
+        Group {
             if turn.reply.isEmpty {
                 Text("Claude 还没有回复").foregroundStyle(.secondary)
             } else {
@@ -321,56 +340,92 @@ struct SessionDetailView: View {
         .lineSpacing(2)
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(alignment: .leading) {
-            Capsule().fill(tint.opacity(0.7)).frame(width: 3).padding(.vertical, 10)
-        }
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    /// The last few rounds, a line each; the 对话 tab has them all.
-    private var recentCard: some View {
-        let rounds = rounds
-        let shown = Array(rounds.dropFirst().prefix(Self.previewRounds))
-        return DetailCard(title: "最近对话") {
-            if shown.isEmpty {
-                placeholder(rounds.isEmpty ? "还没有对话记录" : "只有当前这一轮")
+    /// The tasks this session is in, so that shows without opening 加入任务.
+    private var tasksCard: some View {
+        let linked = tasks.tasks(containing: session.id)
+        return DetailCard(title: "开发任务") {
+            if linked.isEmpty {
+                placeholder("还没有加入任务")
             } else {
-                ForEach(Array(shown.enumerated()), id: \.offset) { index, turn in
+                ForEach(Array(linked.enumerated()), id: \.element.id) { index, task in
                     if index > 0 { CardDivider(leading: 14) }
-                    roundLine(turn)
+                    taskRow(task)
                 }
             }
-            CardDivider(leading: 14)
-            linkRow("查看对话") { tab = .conversation }
         }
     }
 
-    private func roundLine(_ turn: ConversationTurn) -> some View {
-        Button { tab = .conversation } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(turn.prompt)
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
-                    if let reply = Transcript.replyLine(turn.reply) {
-                        Text(reply).font(.rowDetail).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 8)
-                if let at = turn.at {
-                    Text(Self.clock(at, now: now)).font(.rowTime).foregroundStyle(.secondary).fixedSize()
-                }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+    private func taskRow(_ task: DevTask) -> some View {
+        Button { taskActions.open(task.id) } label: {
+            HStack(spacing: 8) {
+                Text(task.title.isEmpty ? "未命名任务" : task.title)
+                    .lineLimit(1)
+                Spacer(minLength: 12)
+                Text(task.status.title).foregroundStyle(.secondary).fixedSize()
+                chevron
             }
+            .font(.system(size: 13))
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .frame(minHeight: 34)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityHint("在对话里查看")
+        .help("打开任务")
+    }
+
+    /// Where the session works: which checkout, on which branch, and what is uncommitted.
+    private var workspaceCard: some View {
+        DetailCard(title: "工作区") {
+            if let checkout = checkoutLabel {
+                infoRow("位置") {
+                    Text(checkout).help("主仓库在 \(session.project.root)")
+                }
+                CardDivider(leading: 14)
+            }
+            infoRow("目录") {
+                Text((session.cwd as NSString).abbreviatingWithTildeInPath)
+                    .truncationMode(.head)
+                    .textSelection(.enabled)
+                    .help(session.cwd)
+            }
+            gitRows
+        }
+    }
+
+    /// A linked worktree, or the repository's own checkout; nil outside a repository.
+    private var checkoutLabel: String? {
+        if session.project.worktree != nil { return "worktree" }
+        return session.project.branch == nil ? nil : "主仓库"
+    }
+
+    /// The count opens 改动, where the files are.
+    private func changesRow(_ count: Int) -> some View {
+        Button { tab = .changes } label: {
+            HStack(spacing: 8) {
+                Text("改动").foregroundStyle(.secondary).fixedSize()
+                Spacer(minLength: 12)
+                Text(count == 0 ? "没有未提交的改动" : "\(count) 个文件")
+                    .foregroundStyle(count == 0 ? .secondary : .primary)
+                    .monospacedDigit()
+                chevron
+            }
+            .font(.system(size: 13))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 34)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("查看改动的文件")
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
     }
 
     private func linkRow(_ title: String, action: @escaping () -> Void) -> some View {
@@ -437,15 +492,12 @@ struct SessionDetailView: View {
                 TurnCard(turn: entry.turn, now: now, standing: entry.newest ? standing : nil)
             }
             if shown.count < rounds.count || conversationWindow?.hasEarlier == true {
-                Button(loadingConversation ? "正在读取…" : "加载更早的对话") {
+                quietButton(loadingConversation ? "正在读取…" : "加载更早的对话") {
                     visibleRounds += Self.recentRounds
                     if visibleRounds > rounds.count, conversationWindow?.hasEarlier == true {
                         conversationRequest += 1
                     }
                 }
-                .buttonStyle(.link)
-                .font(.rowDetail)
-                .padding(.horizontal, 4)
                 .disabled(loadingConversation)
             }
         }
@@ -465,8 +517,7 @@ struct SessionDetailView: View {
                     BranchTag(branch: snapshot.branch ?? "游离 HEAD")
                         .frame(maxWidth: 130, alignment: .trailing)
                 }
-                Button("刷新") { workspaceRequest += 1 }
-                    .buttonStyle(.link)
+                quietButton("刷新") { workspaceRequest += 1 }
             }
             changesCard
         }
@@ -544,16 +595,8 @@ struct SessionDetailView: View {
 
     // MARK: - Session facts
 
-    private var infoCard: some View {
+    private var sessionCard: some View {
         DetailCard(title: "会话信息") {
-            infoRow("目录") {
-                Text((session.cwd as NSString).abbreviatingWithTildeInPath)
-                    .truncationMode(.head)
-                    .textSelection(.enabled)
-                    .help(session.cwd)
-            }
-            gitRows
-            CardDivider(leading: 14)
             infoRow("会话 ID") {
                 Text(session.id)
                     .font(.system(size: 12).monospacedDigit())
@@ -586,6 +629,8 @@ struct SessionDetailView: View {
                 }
                 Text(snapshot.branch ?? "游离 HEAD").truncationMode(.middle)
             }
+            CardDivider(leading: 14)
+            changesRow(snapshot.changes.count)
             if let commit = snapshot.lastCommit {
                 CardDivider(leading: 14)
                 infoRow("最近提交") {

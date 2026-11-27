@@ -68,7 +68,7 @@ scripts/build-app.sh
 swift scripts/make-icon.swift
 ```
 
-用打包后的 `.app` 验证通知和 hooks。[架构设计](DESIGN.md) · [界面与交互](UI_DESIGN.md) · [版本发布](https://github.com/lance2016/AgentBell/releases)
+用打包后的 `.app` 验证通知和 hooks。[架构设计](DESIGN.md) · [界面与交互](UI_DESIGN.md) · [更新记录](CHANGELOG.md) · [版本发布](https://github.com/lance2016/AgentBell/releases)
 
 ```bash
 /usr/bin/log show --last 10m --style compact --predicate 'subsystem == "com.agentbell.AgentBell"'
