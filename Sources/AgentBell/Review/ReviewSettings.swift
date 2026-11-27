@@ -43,9 +43,14 @@ enum ReviewPreference {
         let tasks = store.tasks.tasks.flatMap { $0.workspaces.map(\.projectRoot) }
         var seen: Set<String> = []
         return (store.pinnedProjects + sessions.map(\.id) + tasks + extra).filter {
-            seen.insert($0).inserted && !ReviewRunner.isReviewCheckout($0)
-                && FileManager.default.fileExists(atPath: ($0 as NSString).appendingPathComponent(".git"))
+            seen.insert($0).inserted && canReview($0)
         }
+    }
+
+    /// A Git repository of the user's own, not a checkout a review made.
+    static func canReview(_ path: String) -> Bool {
+        !ReviewRunner.isReviewCheckout(path)
+            && FileManager.default.fileExists(atPath: (path as NSString).appendingPathComponent(".git"))
     }
 
     @MainActor static func chooseRepository() -> String? {

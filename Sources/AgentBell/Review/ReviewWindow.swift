@@ -13,6 +13,8 @@ final class ReviewWindowState {
     var focus = ""
     /// Nil until the user picks one: the default from Settings applies.
     var model: ReviewModel?
+    /// The repository picked for the next review; nil matches one from what is reviewed.
+    var repository: String?
 }
 
 @MainActor
@@ -58,6 +60,13 @@ final class ReviewWindowController {
         state.selection = id.map { [$0] } ?? []
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Opens the form for a new review, in `repository` when one is given. Without one,
+    /// a draft keeps the repository already picked for it.
+    func newReview(in repository: String?) {
+        if let repository { state.repository = repository }
+        show(selecting: nil)
     }
 
     /// Reviews run for minutes: say when one ends, unless the user is looking at it.
@@ -194,7 +203,8 @@ private struct ReviewSidebar: View {
     }
 }
 
-private struct JobRow: View {
+/// A review still running or failed, in the window's list and on the panel's 代码审查 page.
+struct JobRow: View {
     let job: ReviewStore.Job
 
     var body: some View {
@@ -231,7 +241,8 @@ private struct JobRow: View {
     }
 }
 
-private struct RecordRow: View {
+/// A saved report, in the window's list and on the panel's 代码审查 page.
+struct RecordRow: View {
     let record: ReviewRecord
 
     var body: some View {

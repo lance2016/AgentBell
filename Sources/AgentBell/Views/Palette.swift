@@ -61,6 +61,7 @@ extension Color {
     /// The sidebar's pages, each with its own tile colour as in System Settings.
     static let attentionTile = Color(nsColor: .systemBlue)
     static let tasksTile = Color(nsColor: .systemGray)
+    static let reviewsTile = Color(nsColor: .systemGray)
 
     /// Project tiles stay clear of the lamps' amber, blue, green and red, so a tile never
     /// reads as a state. System colours follow dark mode and increased contrast.

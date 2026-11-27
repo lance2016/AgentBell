@@ -7,7 +7,8 @@ extension PanelView {
         let projects = state.projects(store)
         let attentionPicked = state.needsAttentionOnly && !state.searchVisible
         let tasksPicked = state.tasksVisible && state.detailID == nil
-        let picked = attentionPicked || tasksPicked || (state.searchVisible && state.detailID == nil)
+        let reviewsPicked = state.reviewsVisible && state.detailID == nil
+        let picked = attentionPicked || tasksPicked || reviewsPicked || (state.searchVisible && state.detailID == nil)
             ? nil : state.detailSession(store)?.project.root ?? state.pickedEntry(store)?.id
 
         return VStack(alignment: .leading, spacing: 0) {
@@ -21,6 +22,7 @@ extension PanelView {
             VStack(spacing: 2) {
                 sidebarAttention(picked: attentionPicked)
                 sidebarTasks(picked: tasksPicked)
+                sidebarReviews(picked: reviewsPicked)
             }
             .padding(.horizontal, 10)
             // The pages above, the projects below.
@@ -37,6 +39,7 @@ extension PanelView {
                                           radius: BellLayout.rowRadius + 2,
                                           toggle: { store.toggleProjectPin(project.id) },
                                           newSession: { actions.launchInProject(project.id) },
+                                          newReview: reviewAction(for: project.id),
                                           reveal: { actions.revealProject(project.id) }) { hovering in
                                 ProjectItem(project: project, picked: isPicked, showCount: !hovering) {
                                     state.pick(project: project.id, store)
@@ -104,6 +107,23 @@ extension PanelView {
         }
         .accessibilityValue("\(count) 个未完成任务")
         .help("记下做到哪、在哪个分支和会话，回来时一键恢复")
+    }
+
+    /// The count is what still runs; a failed review waits on the page, not as a badge.
+    private func sidebarReviews(picked: Bool) -> some View {
+        let count = reviews.jobs.count(where: \.running)
+        return sidebarPage("代码审查", symbol: "text.magnifyingglass", tint: .reviewsTile,
+                           count: count, picked: picked) {
+            state.showReviews(true)
+        }
+        .accessibilityValue("\(count) 个进行中的审查")
+        .help("查看进行中的审查和已保存的报告")
+    }
+
+    /// 新建审查 in a project's menu, only where there is a Git repository to review.
+    func reviewAction(for project: String) -> (() -> Void)? {
+        guard ReviewPreference.canReview(project) else { return nil }
+        return { actions.newReview(project) }
     }
 
     /// A page above the projects, such as 待处理: picked like a project, with a count.
@@ -230,6 +250,8 @@ struct ProjectPinRow<Content: View>: View {
     var radius = BellLayout.rowRadius
     let toggle: () -> Void
     let newSession: () -> Void
+    /// Nil where the project is no Git repository.
+    let newReview: (() -> Void)?
     let reveal: () -> Void
     @ViewBuilder let content: (Bool) -> Content
     @ViewState private var hovering = false
@@ -260,11 +282,17 @@ struct ProjectPinRow<Content: View>: View {
         .onHover { hovering = $0 }
         .contextMenu {
             Button("新建会话", systemImage: "plus", action: newSession)
+            if let newReview {
+                Button("新建审查", systemImage: "text.magnifyingglass", action: newReview)
+            }
             Button(title, systemImage: symbol, action: toggle)
             Button("在访达中显示", systemImage: "folder", action: reveal)
         }
         .accessibilityAction(named: Text(title), toggle)
         .accessibilityAction(named: Text("新建会话"), newSession)
+        .accessibilityActions {
+            if let newReview { Button("新建审查", action: newReview) }
+        }
         .accessibilityAction(named: Text("在访达中显示"), reveal)
     }
 }

@@ -35,6 +35,8 @@ final class PanelState {
     var tasksNarrow = false
     /// Its title takes the focus when its detail shows.
     var taskToRename: UUID?
+    /// The 代码审查 page shows instead of sessions.
+    private(set) var reviewsVisible = false
 
     var isFiltering: Bool { !searchTerm.isEmpty }
 
@@ -67,6 +69,7 @@ final class PanelState {
         }
         selectionBeforeSearch = selectedID
         tasksVisible = false
+        reviewsVisible = false
         searchVisible = true
         selectedID = nil
     }
@@ -112,6 +115,7 @@ final class PanelState {
         detailID = nil
         closeSearch()
         tasksVisible = false
+        reviewsVisible = false
         needsAttentionOnly = show
         selectFirst(store)
     }
@@ -120,8 +124,17 @@ final class PanelState {
         detailID = nil
         closeSearch()
         needsAttentionOnly = false
+        reviewsVisible = false
         tasksVisible = show
         addingTask = false
+    }
+
+    func showReviews(_ show: Bool) {
+        detailID = nil
+        closeSearch()
+        needsAttentionOnly = false
+        tasksVisible = false
+        reviewsVisible = show
     }
 
     /// Opens one task, its title ready to edit when it was just made from a session.
@@ -171,7 +184,7 @@ final class PanelState {
 
     /// Rows in display order, which is also keyboard order.
     func selectableSessions(_ store: SessionStore) -> [Session] {
-        if tasksVisible { return [] }
+        if tasksVisible || reviewsVisible { return [] }
         if searchVisible {
             return PanelLayout.groups(store.liveSessions.filter { matches($0) }, pinned: store.pinnedProjects).flatMap(\.sessions)
                 + store.tracker.recent.filter { matches($0) }
@@ -195,6 +208,7 @@ final class PanelState {
         selectionShown = false
         closeSearch()
         tasksVisible = false
+        reviewsVisible = false
         addingTask = false
         let projects = projects(store)
         if let waiting = projects.first(where: { $0.live.contains { $0.state == .waiting } }) {
@@ -212,6 +226,7 @@ final class PanelState {
         closeSearch()
         needsAttentionOnly = false
         tasksVisible = false
+        reviewsVisible = false
         pickedProject = project
         selectFirst(store)
     }

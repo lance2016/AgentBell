@@ -19,13 +19,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsWindowController(store: store)
         let reviews = ReviewStore(sessions: store)
         let review = ReviewWindowController(store: store, reviews: reviews, openSettings: { settings.showReview() })
-        let panel = PanelController(store: store, presentation: .popover)
-        let window = PanelController(store: store, presentation: .window)
+        let panel = PanelController(store: store, reviews: reviews, presentation: .popover)
+        let window = PanelController(store: store, reviews: reviews, presentation: .window)
         panel.openSettings = { settings.show() }
         window.openSettings = { settings.show() }
-        // "新建会话 → 代码审查" asks for a new review: the window opens on the form.
-        panel.openReview = { review.show(selecting: nil) }
-        window.openReview = { review.show(selecting: nil) }
+        // The panel lists the reviews; reading one, or starting one, is in the review window.
+        for controller in [panel, window] {
+            controller.openReview = { review.show(selecting: $0) }
+            controller.newReview = { review.newReview(in: $0) }
+        }
         // In the Dock and the app switcher while the window is open, as a regular app.
         window.onVisibilityChange = { shown in
             NSApp.setActivationPolicy(shown ? .regular : .accessory)
