@@ -9,6 +9,10 @@ struct SessionStopperTests {
         #expect(SessionStopper.matches(name: "claude", started: started + 2, sessionStarted: started))
         // npm installs run Claude Code under node.
         #expect(SessionStopper.matches(name: "node", started: started - 3, sessionStarted: started))
+        // The native installer runs ~/.local/share/claude/versions/<version>, so the
+        // kernel names the process after its version.
+        #expect(SessionStopper.matches(name: "2.1.332", started: started, sessionStarted: started))
+        #expect(!SessionStopper.matches(name: "2.1.", started: started, sessionStarted: started))
         // The pid was reused by something else, or by a later process.
         #expect(!SessionStopper.matches(name: "zsh", started: started, sessionStarted: started))
         #expect(!SessionStopper.matches(name: "claude", started: started + 3600, sessionStarted: started))

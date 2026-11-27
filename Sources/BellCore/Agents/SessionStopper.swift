@@ -19,8 +19,16 @@ public enum SessionStopper {
         return kill(session.pid, SIGTERM) == 0
     }
 
-    /// Claude Code runs as `claude`, or as `node` when installed with npm.
+    /// Claude Code runs as `claude`, as `node` when installed with npm, or under its
+    /// version (like `2.1.332`) when installed natively: `~/.local/bin/claude` links to
+    /// `~/.local/share/claude/versions/<version>`, and the kernel names the process after that.
     static func matches(name: String, started: Date, sessionStarted: Date) -> Bool {
-        ["claude", "node"].contains(name) && abs(started.timeIntervalSince(sessionStarted)) <= startTolerance
+        (["claude", "node"].contains(name) || isVersion(name))
+            && abs(started.timeIntervalSince(sessionStarted)) <= startTolerance
+    }
+
+    private static func isVersion(_ name: String) -> Bool {
+        let parts = name.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count >= 2 && parts.allSatisfy { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
     }
 }
