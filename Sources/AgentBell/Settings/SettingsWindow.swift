@@ -180,6 +180,7 @@ struct GeneralSettings: View {
     @AppStorage(Entry.menuBarKey) private var menuBarIcon = true
     @AppStorage(Entry.desktopKey) private var desktopIcon = true
     @AppStorage(TerminalApp.defaultsKey) private var storedTerminal = ""
+    @AppStorage(TerminalFill.defaultsKey) private var fillScreen = false
 
     @ViewState private var showsDiagnostics = false
 
@@ -292,6 +293,12 @@ struct GeneralSettings: View {
                         Text("免费开源，跳回时能定位到具体分屏")
                     }
                 }
+            }
+            Toggle(isOn: $fillScreen) {
+                Text("跳转后铺满屏幕")
+                Text(model.accessibilityAllowed
+                     ? "回到会话或新建会话时，终端窗口没铺满就铺满当前屏幕，不进入全屏"
+                     : "需要在「权限」里允许辅助功能")
             }
         }
     }

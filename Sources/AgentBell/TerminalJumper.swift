@@ -127,6 +127,8 @@ enum TerminalJumper {
         if let running = NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).first {
             NSApp.yieldActivation(to: running)
             running.activate()
+            let pid = running.processIdentifier
+            Task { await TerminalFill.apply(pid: pid) }
         }
     }
 
@@ -182,11 +184,16 @@ enum TerminalJumper {
     }
 
     /// macOS 14 only honours activating another app when the active app yields to it.
-    /// Rings the terminal once it is in front, so the eye finds it among the splits.
+    /// Fills the screen with the window when Settings asks, then rings the terminal where
+    /// it ends up, so the eye finds it among the splits.
     private static func bringForward(_ app: NSRunningApplication) {
         NSApp.yieldActivation(to: app)
         app.activate()
-        TerminalHighlight.flash(pid: app.processIdentifier)
+        let pid = app.processIdentifier
+        Task {
+            await TerminalFill.apply(pid: pid)
+            TerminalHighlight.flash(pid: pid)
+        }
     }
 
     nonisolated private static func isRegularApp(_ pid: Int32) -> Bool {
