@@ -15,21 +15,12 @@ enum ReleaseNotes {
     }
 
     static let items = [
+        Item(symbol: "cursorarrow.click",
+             title: "macOS 26 上点得中桌面小终端",
+             detail: "以前只有一小块能拖，其他地方的点击会穿到桌面上。现在整个小终端都能点、拖和右键。"),
         Item(symbol: "checkmark.bubble",
-             title: "代码审查",
-             detail: "「新建会话 → 代码审查」里粘贴团队消息或 GitLab MR 链接，点一次开始，在独立 worktree 审查并复制 Markdown。默认仓库和模板在「设置 › 审查」配置。"),
-        Item(symbol: "arrow.uturn.forward",
-             title: "继续工作与连接诊断",
-             detail: "任务关联的会话关掉后，点「继续工作」在原目录恢复；收不到提醒时，「设置 › 通用 › 连接诊断」帮你找原因。"),
-        Item(symbol: "list.bullet.rectangle",
-             title: "更好认的会话列表",
-             detail: "每个会话一行标题、一行最近一轮的摘要，最近活动时间在右边；分支和加入的开发任务有才显示，不再标出「同目录」。"),
-        Item(symbol: "pencil",
-             title: "给会话改名",
-             detail: "点会话行或详情标题旁的铅笔，就地改名，回车保存，Esc 取消。名字只在 AgentBell 里生效；Claude Code 里 /rename 的名字关掉后也照样显示。"),
-        Item(symbol: "rectangle.righthalf.inset.filled.arrow.right",
-             title: "桌面小终端贴边",
-             detail: "拖到屏幕左侧或右侧松手，它会贴边收起，鼠标停留时探出来。"),
+             title: "代码审查一键开始",
+             detail: "在「设置 › 审查」选一次默认仓库，之后粘贴团队消息，点「开始 Review」即可。MR 链接会自动匹配已有仓库。"),
     ]
 }
 
