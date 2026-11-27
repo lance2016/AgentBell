@@ -188,13 +188,13 @@ final class PanelState {
         if tasksVisible || reportPage != nil { return [] }
         if searchVisible {
             return PanelLayout.groups(store.liveSessions.filter { matches($0) }, pinned: store.pinnedProjects).flatMap(\.sessions)
-                + store.tracker.recent.filter { matches($0) }
+                + PanelLayout.listed(store.tracker.recent).filter { matches($0) }
         }
         if needsAttentionOnly { return attentionSessions(store) }
         switch PanelStyle.current {
         case .list:
             let live = PanelLayout.groups(store.liveSessions, pinned: store.pinnedProjects).filter { isExpanded($0.id) }.flatMap(\.sessions)
-            return recentExpanded ? live + store.tracker.recent : live
+            return recentExpanded ? live + PanelLayout.listed(store.tracker.recent) : live
         case .sidebar:
             guard let entry = pickedEntry(store) else { return [] }
             return showsClosed(entry) ? entry.live + entry.closed : entry.live
