@@ -37,6 +37,12 @@ AgentBell 会检查审查范围，再让 Claude 在独立 worktree 里后台审�
 
 审查窗口左边列出进行中和已完成的审查，右边显示报告。每次审查保存为一个文件夹，里面有 `report.md`，默认放在 `~/Library/Application Support/AgentBell/Review Reports/`，可以在设置里换位置。报告可以复制、在访达中显示、用默认应用打开编辑，也可以删除（支持多选和 ⌫ 键）。想接着追问，点「在终端继续」，会在终端里恢复这次审查的会话。审查用的 worktree 放在 `~/Library/Application Support/AgentBell/Reviews/`，三天后在下次审查同一仓库时清理；清理后报告还在，只是不能再在终端继续。删除审查记录时，它的 worktree 也一起删除。MR 使用已登录的 GitLab CLI（`glab`）读取元数据。
 
+## 周报
+
+在侧栏的「周报」页点「生成周报」，选「本周」或「上周」（按周一到周日算），表单会先读出这段时间有多少会话，并按项目列出；不想写进周报的项目取消勾选即可，下次会保持不勾选。再点「生成周报」（⌘↩）。AgentBell 读取这段时间你在 Claude Code 里每轮的提问和最后的回答，按项目整理后交给所选模型，Claude 不使用任何工具。代码审查、周报这些 AgentBell 自己发起的会话不算在内。
+
+周报模板和默认模型在「设置 › 周报」里改，模板可用 `{{period}}`（本周或上周）、`{{next_period}}`（它的下一周，写计划用）和 `{{days}}`（日期范围）。写好的周报存在 `~/Library/Application Support/AgentBell/Weekly Reports/`，每份一个带 `report.md` 的文件夹。在周报窗口里切到「编辑」可以直接改，边改边保存；也可以复制、在访达中显示或用默认应用打开。想让 Claude 改，点「在终端继续」：会话会恢复，在会话列表里带日历图标，标题是「周报 日期范围」。
+
 ## 快速开始
 
 需要 **macOS 14+**、**Xcode 16+（Swift 6）**，以及支持 `claude agents --json` 的 **Claude Code**。

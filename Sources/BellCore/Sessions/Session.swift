@@ -63,14 +63,17 @@ public struct Session: Sendable, Equatable, Identifiable, Codable {
     public var isEnded: Bool { endedAt != nil }
 
     /// A name given in AgentBell, else one given with /rename (from `claude agents` while
-    /// open, from the transcript once closed), else what a review reviews, else Claude's
+    /// open, from the transcript once closed), else what a review or a report covers, else Claude's
     /// own title, else the last prompt, from the transcript or, before the transcript has
     /// it, from the hooks.
     public var title: String {
         if let alias { return alias }
-        if let name, !name.isEmpty, !Self.isGeneratedName(name, cwd: cwd) { return name }
+        if let name, !name.isEmpty, !Self.isGeneratedName(name, cwd: cwd), !Self.isGeneratedName(name, cwd: project.root) {
+            return name
+        }
         if let title = transcript?.customTitle { return title }
         if let review = project.review { return review.title }
+        if let weekly = project.weekly { return weekly.title }
         if let title = transcript?.title { return title }
         return (transcript?.lastPrompt ?? heardTurns.last?.prompt).map(Self.promptTitle) ?? "新会话"
     }
@@ -83,8 +86,10 @@ public struct Session: Sendable, Equatable, Identifiable, Codable {
         return rest.isEmpty ? prompt : rest
     }
 
-    /// `claude agents` names an unnamed session after its folder plus a short hex
-    /// suffix, like "ai-pet-7f". That says nothing the group name doesn't.
+    /// `claude agents` names an unnamed session after the folder it started in plus a
+    /// short hex suffix, like "ai-pet-7f". That says nothing the group name doesn't.
+    /// `title` also tries the project's folder: a session that moved into one of its
+    /// worktrees keeps the name of where it started.
     static func isGeneratedName(_ name: String, cwd: String) -> Bool {
         let folder = (cwd as NSString).lastPathComponent
         guard name.hasPrefix(folder + "-") else { return false }

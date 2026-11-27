@@ -35,8 +35,8 @@ final class PanelState {
     var tasksNarrow = false
     /// Its title takes the focus when its detail shows.
     var taskToRename: UUID?
-    /// The 代码审查 page shows instead of sessions.
-    private(set) var reviewsVisible = false
+    /// The 代码审查 or 周报 page, shown instead of sessions.
+    private(set) var reportPage: ReportPage?
 
     var isFiltering: Bool { !searchTerm.isEmpty }
 
@@ -69,7 +69,7 @@ final class PanelState {
         }
         selectionBeforeSearch = selectedID
         tasksVisible = false
-        reviewsVisible = false
+        reportPage = nil
         searchVisible = true
         selectedID = nil
     }
@@ -115,7 +115,7 @@ final class PanelState {
         detailID = nil
         closeSearch()
         tasksVisible = false
-        reviewsVisible = false
+        reportPage = nil
         needsAttentionOnly = show
         selectFirst(store)
     }
@@ -124,17 +124,18 @@ final class PanelState {
         detailID = nil
         closeSearch()
         needsAttentionOnly = false
-        reviewsVisible = false
+        reportPage = nil
         tasksVisible = show
         addingTask = false
     }
 
-    func showReviews(_ show: Bool) {
+    /// Opens 代码审查 or 周报, or with nil goes back to the sessions.
+    func showReportPage(_ page: ReportPage?) {
         detailID = nil
         closeSearch()
         needsAttentionOnly = false
         tasksVisible = false
-        reviewsVisible = show
+        reportPage = page
     }
 
     /// Opens one task, its title ready to edit when it was just made from a session.
@@ -184,7 +185,7 @@ final class PanelState {
 
     /// Rows in display order, which is also keyboard order.
     func selectableSessions(_ store: SessionStore) -> [Session] {
-        if tasksVisible || reviewsVisible { return [] }
+        if tasksVisible || reportPage != nil { return [] }
         if searchVisible {
             return PanelLayout.groups(store.liveSessions.filter { matches($0) }, pinned: store.pinnedProjects).flatMap(\.sessions)
                 + store.tracker.recent.filter { matches($0) }
@@ -208,7 +209,7 @@ final class PanelState {
         selectionShown = false
         closeSearch()
         tasksVisible = false
-        reviewsVisible = false
+        reportPage = nil
         addingTask = false
         let projects = projects(store)
         if let waiting = projects.first(where: { $0.live.contains { $0.state == .waiting } }) {
@@ -226,7 +227,7 @@ final class PanelState {
         closeSearch()
         needsAttentionOnly = false
         tasksVisible = false
-        reviewsVisible = false
+        reportPage = nil
         pickedProject = project
         selectFirst(store)
     }
@@ -269,6 +270,34 @@ final class PanelState {
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
             feedback = nil
+        }
+    }
+}
+
+/// The pages listing what AgentBell ran in the background; reading one is in its window.
+enum ReportPage {
+    case reviews
+    case weekly
+
+    var title: String {
+        switch self {
+        case .reviews: "代码审查"
+        case .weekly: "周报"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .reviews: "text.magnifyingglass"
+        case .weekly: "calendar"
+        }
+    }
+
+    /// What the page holds, for its button's help.
+    var note: String {
+        switch self {
+        case .reviews: "代码审查：进行中的审查和已保存的报告"
+        case .weekly: "周报：整理本周或上周的会话，写好的周报可以修改"
         }
     }
 }

@@ -7,8 +7,8 @@ extension PanelView {
         let projects = state.projects(store)
         let attentionPicked = state.needsAttentionOnly && !state.searchVisible
         let tasksPicked = state.tasksVisible && state.detailID == nil
-        let reviewsPicked = state.reviewsVisible && state.detailID == nil
-        let picked = attentionPicked || tasksPicked || reviewsPicked || (state.searchVisible && state.detailID == nil)
+        let reportPicked = state.detailID == nil ? state.reportPage : nil
+        let picked = attentionPicked || tasksPicked || reportPicked != nil || (state.searchVisible && state.detailID == nil)
             ? nil : state.detailSession(store)?.project.root ?? state.pickedEntry(store)?.id
 
         return VStack(alignment: .leading, spacing: 0) {
@@ -22,7 +22,8 @@ extension PanelView {
             VStack(spacing: 2) {
                 sidebarAttention(picked: attentionPicked)
                 sidebarTasks(picked: tasksPicked)
-                sidebarReviews(picked: reviewsPicked)
+                sidebarReport(.reviews, picked: reportPicked == .reviews)
+                sidebarReport(.weekly, picked: reportPicked == .weekly)
             }
             .padding(.horizontal, 10)
             // The pages above, the projects below.
@@ -109,15 +110,15 @@ extension PanelView {
         .help("记下做到哪、在哪个分支和会话，回来时一键恢复")
     }
 
-    /// The count is what still runs; a failed review waits on the page, not as a badge.
-    private func sidebarReviews(picked: Bool) -> some View {
-        let count = reviews.jobs.count(where: \.running)
-        return sidebarPage("代码审查", symbol: "text.magnifyingglass", tint: .reviewsTile,
+    /// The count is what still runs; a failed one waits on the page, not as a badge.
+    private func sidebarReport(_ page: ReportPage, picked: Bool) -> some View {
+        let count = runningCount(page)
+        return sidebarPage(page.title, symbol: page.symbol, tint: page == .reviews ? .reviewsTile : .weeklyTile,
                            count: count, picked: picked) {
-            state.showReviews(true)
+            state.showReportPage(page)
         }
-        .accessibilityValue("\(count) 个进行中的审查")
-        .help("查看进行中的审查和已保存的报告")
+        .accessibilityValue("\(count) 个进行中")
+        .help(page.note)
     }
 
     /// 新建审查 in a project's menu, only where there is a Git repository to review.

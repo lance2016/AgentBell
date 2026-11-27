@@ -34,8 +34,8 @@ final class Notifier: NSObject {
     private(set) var previewsHidden = false
     /// A notification was clicked; the session id it was about.
     @ObservationIgnored var onOpen: ((String) -> Void)?
-    /// A code review notification was clicked; the review's id.
-    @ObservationIgnored var onOpenReview: ((String) -> Void)?
+    /// A notification about a review or a weekly report was clicked; which, and its id.
+    @ObservationIgnored var onOpenBackground: ((BackgroundWork, String) -> Void)?
     /// What to post and take back, for the bubbles beside the desktop icon.
     @ObservationIgnored var onChanges: ((Notices.Changes) -> Void)?
 
@@ -138,25 +138,22 @@ final class Notifier: NSObject {
         }
     }
 
-    /// Bubble notices about a review carry its id behind this prefix in place of a session.
-    static let reviewPrefix = "review:"
-
-    /// A background code review ended. Reviews run without a session AgentBell lists,
+    /// A code review or a weekly report ended. They run without a session AgentBell lists,
     /// so this goes around `Notices`, to the same places the switches in Settings choose.
-    func postReview(id: String, title: String, body: String, failed: Bool) {
-        let notice = Notice(session: Self.reviewPrefix + id, kind: failed ? .failed : .done, title: title, body: body)
+    func postBackground(_ work: BackgroundWork, id: String, title: String, body: String, failed: Bool) {
+        let notice = Notice(session: work.prefix + id, kind: failed ? .failed : .done, title: title, body: body)
         // The bubbles check their own switch.
         onChanges?(Notices.Changes(post: [notice]))
         guard Self.isOn(Key.system), permission == .allowed else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        content.userInfo = ["review": id]
+        content.userInfo = [work.rawValue: id]
         content.sound = .default
         let request = UNNotificationRequest(identifier: notice.id, content: content, trigger: nil)
         center.add(request) { [log] error in
             if let error {
-                log.error("posting review failed: \(String(describing: error), privacy: .public)")
+                log.error("posting \(work.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -209,11 +206,26 @@ extension Notifier: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse
     ) async {
         let info = response.notification.request.content.userInfo
-        if let review = info["review"] as? String {
-            await MainActor.run { onOpenReview?(review) }
+        for work in BackgroundWork.allCases {
+            guard let id = info[work.rawValue] as? String else { continue }
+            await MainActor.run { onOpenBackground?(work, id) }
             return
         }
         guard let session = info["session"] as? String else { return }
         await MainActor.run { onOpen?(session) }
+    }
+}
+
+/// Work AgentBell runs in the background, outside any session it lists.
+enum BackgroundWork: String, CaseIterable, Sendable {
+    case review
+    case weekly
+
+    /// Bubble notices carry the id behind this prefix in place of a session.
+    var prefix: String { rawValue + ":" }
+
+    /// Whose a bubble notice is, and the id behind its prefix; nil for a session's own.
+    static func parse(_ notice: String) -> (work: BackgroundWork, id: String)? {
+        allCases.first { notice.hasPrefix($0.prefix) }.map { ($0, String(notice.dropFirst($0.prefix.count))) }
     }
 }

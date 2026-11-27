@@ -70,6 +70,10 @@ final class SettingsWindowController {
         present(tab: .review)
     }
 
+    func showWeekly() {
+        present(tab: .weekly)
+    }
+
     private func present(tab: SettingsTab? = nil) {
         refresh()
         let window = self.window
@@ -127,6 +131,7 @@ private struct SettingsPage: View {
             case .notifications: NotificationSettings()
             case .permissions: PermissionSettings(model: model, store: store)
             case .review: ReviewSettings(store: store)
+            case .weekly: WeeklySettings()
             case .about: AboutSettings(model: model, store: store)
             }
         }
@@ -138,7 +143,7 @@ private struct SettingsPage: View {
 }
 
 private enum SettingsTab: CaseIterable, Identifiable {
-    case general, desktop, notifications, permissions, review, about
+    case general, desktop, notifications, permissions, review, weekly, about
 
     var id: Self { self }
 
@@ -149,6 +154,7 @@ private enum SettingsTab: CaseIterable, Identifiable {
         case .notifications: "通知"
         case .permissions: "权限"
         case .review: "审查"
+        case .weekly: "周报"
         case .about: "关于"
         }
     }
@@ -160,6 +166,7 @@ private enum SettingsTab: CaseIterable, Identifiable {
         case .notifications: "bell"
         case .permissions: "lock"
         case .review: "text.magnifyingglass"
+        case .weekly: "calendar"
         case .about: "info.circle"
         }
     }

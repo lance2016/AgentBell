@@ -12,12 +12,16 @@ public struct ProjectInfo: Sendable, Equatable, Codable {
     public var worktree: String?
     /// Set when the worktree is one AgentBell made for a code review.
     public var review: ReviewCheckout?
+    /// Set when the folder is one AgentBell made for a weekly report.
+    public var weekly: WeeklyCheckout?
 
-    public init(root: String, branch: String?, worktree: String? = nil, review: ReviewCheckout? = nil) {
+    public init(root: String, branch: String?, worktree: String? = nil, review: ReviewCheckout? = nil,
+                weekly: WeeklyCheckout? = nil) {
         self.root = root
         self.branch = branch
         self.worktree = worktree
         self.review = review
+        self.weekly = weekly
     }
 
     public var name: String { (root as NSString).lastPathComponent }
@@ -28,8 +32,17 @@ public struct ProjectInfo: Sendable, Equatable, Codable {
     /// The search stops below `home`: a repository in the home folder is a dotfiles repo,
     /// and treating it as the project would lump every non-repo folder into one group.
     public static func lookup(
-        cwd: String, home: String = NSHomeDirectory(), reviews: String = ReviewRunner.checkoutsRoot.path
+        cwd: String, home: String = NSHomeDirectory(), reviews: String = ReviewRunner.checkoutsRoot.path,
+        reports: String = WeeklyRunner.sessionsRoot.path
     ) -> ProjectInfo {
+        // Report sessions list together under 周报, each saying which week it covers.
+        if WeeklyRunner.isReportSession(cwd, root: reports) {
+            let resolved = { (path: String) in URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path }
+            let root = resolved(reports)
+            let relative = resolved(cwd).dropFirst(root.count + 1)
+            let folder = (root as NSString).appendingPathComponent(String(relative.prefix { $0 != "/" }))
+            return ProjectInfo(root: root, branch: nil, weekly: WeeklyCheckout.read(folder: folder))
+        }
         var directory = (cwd as NSString).standardizingPath
         let home = (home as NSString).standardizingPath
         while directory != home {

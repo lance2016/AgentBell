@@ -128,6 +128,16 @@ struct SessionTitleTests {
         #expect(!Session.isGeneratedName("ai-pet-refactor", cwd: "/w/ai-pet"))
     }
 
+    /// Claude Code names a session after the folder it started in. Moved into one of the
+    /// project's worktrees, the name no longer starts with the cwd's folder, only the project's.
+    @Test func generatedNameSurvivesAMoveIntoAWorktree() {
+        let cwd = "/w/agent-bell/.claude/worktrees/weekly-report"
+        let moved = Session(id: "x", pid: 1, cwd: cwd, project: ProjectInfo(root: "/w/agent-bell", branch: nil),
+                            name: "agent-bell-93", startedAt: t0, state: .idle, stateSince: t0,
+                            transcript: TranscriptSummary(title: "周报功能", modifiedAt: t0))
+        #expect(moved.title == "周报功能")
+    }
+
     @Test func titleOrder() {
         let summary = TranscriptSummary(title: "重写电机驱动", lastPrompt: "把参数改成可配置", modifiedAt: t0)
         #expect(session(name: "我的名字", summary: summary).title == "我的名字")

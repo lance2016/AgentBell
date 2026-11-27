@@ -14,6 +14,10 @@ struct PanelActions {
     let openReview: (String) -> Void
     /// The form for a new review, in the given repository or matching one.
     let newReview: (String?) -> Void
+    /// Opens a weekly report in the weekly window.
+    let openWeekly: (String) -> Void
+    /// The form for a new weekly report.
+    let newWeekly: () -> Void
     let chooseClaude: () -> Void
     let refreshSessions: () -> Void
     let openTerminalApp: (Session) -> Void
@@ -27,6 +31,7 @@ struct PanelActions {
 struct PanelView: View {
     let store: SessionStore
     let reviews: ReviewStore
+    let weekly: WeeklyStore
     let state: PanelState
     let actions: PanelActions
     /// In the session window the panel draws under the title bar, around the traffic lights.
@@ -108,8 +113,8 @@ struct PanelView: View {
                 detailBar(detail)
             } else if state.tasksVisible {
                 pageBar("开发任务") { state.showTasks(false) }
-            } else if state.reviewsVisible {
-                pageBar("代码审查") { state.showReviews(false) }
+            } else if let page = state.reportPage {
+                pageBar(page.title) { state.showReportPage(nil) }
             } else if state.searchVisible {
                 BellAppIcon(size: 28)
                 searchField
@@ -133,8 +138,8 @@ struct PanelView: View {
                 detailBar(detail)
             } else if state.tasksVisible {
                 pageTitle("开发任务")
-            } else if state.reviewsVisible {
-                pageTitle("代码审查")
+            } else if let page = state.reportPage {
+                pageTitle(page.title)
             } else if state.searchVisible {
                 pageTitle("搜索")
             } else if state.needsAttentionOnly {
@@ -151,7 +156,7 @@ struct PanelView: View {
                 Spacer(minLength: 0)
             }
             if detail == nil {
-                if state.searchVisible || state.needsAttentionOnly || state.tasksVisible || state.reviewsVisible {
+                if state.searchVisible || state.needsAttentionOnly || state.tasksVisible || state.reportPage != nil {
                     Spacer(minLength: 0)
                 }
                 headerAction
@@ -187,27 +192,31 @@ struct PanelView: View {
         }
     }
 
-    /// The header's one way to make something: a session, or on its own page a task or
-    /// a review.
+    /// The header's one way to make something: a session, or on its own page a task, a
+    /// review or a weekly report.
     @ViewBuilder private var headerAction: some View {
         if state.tasksVisible {
             newTaskButton
-        } else if state.reviewsVisible {
-            newReviewButton
+        } else if let page = state.reportPage {
+            newReportButton(page)
         } else {
             newSessionMenu
         }
     }
 
-    private var newReviewButton: some View {
-        Button { actions.newReview(nil) } label: {
-            Label("新建审查", systemImage: "plus")
+    private func newReportButton(_ page: ReportPage) -> some View {
+        let (title, note, action) = switch page {
+        case .reviews: ("新建审查", "在审查窗口填写要审查的 MR 或分支", { actions.newReview(nil) })
+        case .weekly: ("生成周报", "在周报窗口选本周或上周，整理这段时间的会话", actions.newWeekly)
+        }
+        return Button(action: action) {
+            Label(title, systemImage: "plus")
                 .padding(.horizontal, 6)
                 .frame(height: BellLayout.controlHeight)
         }
         .buttonStyle(BellButtonStyle(radius: BellLayout.controlRadius))
         .fixedSize()
-        .help("在审查窗口填写要审查的 MR 或分支")
+        .help(note)
     }
 
     private var newTaskButton: some View {
@@ -235,20 +244,31 @@ struct PanelView: View {
         .help("开发任务：记下做到哪、在哪个分支和会话")
     }
 
-    private var reviewsButton: some View {
-        let running = reviews.jobs.count(where: \.running)
-        return Button { state.showReviews(true) } label: {
-            Label(running > 0 ? "审查 \(running)" : "审查", systemImage: "text.magnifyingglass")
-                .labelStyle(TightLabelStyle())
-                .font(.rowDetail)
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.horizontal, 8)
-                .frame(height: BellLayout.controlHeight)
+    /// What still runs on a report page: the sidebar's count, the footer button's number.
+    func runningCount(_ page: ReportPage) -> Int {
+        switch page {
+        case .reviews: reviews.jobs.count(where: \.running)
+        case .weekly: weekly.jobs.count(where: \.running)
+        }
+    }
+
+    /// The footer has little room: an icon, and a number while something runs.
+    private func reportButton(_ page: ReportPage) -> some View {
+        let running = runningCount(page)
+        return Button { state.showReportPage(page) } label: {
+            HStack(spacing: 4) {
+                Image(systemName: page.symbol)
+                if running > 0 { Text("\(running)").monospacedDigit() }
+            }
+            .font(.rowDetail)
+            .fixedSize()
+            .padding(.horizontal, 8)
+            .frame(height: BellLayout.controlHeight)
         }
         .buttonStyle(BellButtonStyle(radius: BellLayout.controlRadius))
+        .accessibilityLabel(page.title)
         .accessibilityValue(running > 0 ? "\(running) 个进行中" : "")
-        .help("代码审查：进行中的审查和已保存的报告")
+        .help(page.note)
     }
 
     private var newSessionMenu: some View {
@@ -378,8 +398,10 @@ struct PanelView: View {
             notice
             if state.tasksVisible {
                 TasksPage(store: store, state: state, actions: actions.tasks)
-            } else if state.reviewsVisible {
+            } else if state.reportPage == .reviews {
                 ReviewsPage(reviews: reviews, open: actions.openReview)
+            } else if state.reportPage == .weekly {
+                WeeklyPage(weekly: weekly, open: actions.openWeekly)
             } else {
                 sessionBrowser
             }
@@ -392,7 +414,8 @@ struct PanelView: View {
                 statusSummary
                 Spacer(minLength: 4)
                 tasksButton
-                reviewsButton
+                reportButton(.reviews)
+                reportButton(.weekly)
                 attentionButton
             }
             .padding(.horizontal, BellLayout.inset)

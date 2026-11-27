@@ -72,7 +72,7 @@ final class ReviewWindowController {
     /// Reviews run for minutes: say when one ends, unless the user is looking at it.
     private func finished(id: String, title: String, body: String, failed: Bool) {
         guard !(NSApp.isActive && window.isKeyWindow && state.selection == [id]) else { return }
-        store.notifier.postReview(id: id, title: title, body: body, failed: failed)
+        store.notifier.postBackground(.review, id: id, title: title, body: body, failed: failed)
     }
 }
 

@@ -45,9 +45,10 @@ public enum Copy {
     }
 
     /// The row's "你：" line: what was asked last, unless the title already is that or
-    /// AgentBell asked it to start a review.
+    /// AgentBell asked it to start a review or a weekly report.
     public static func asked(_ session: Session) -> String? {
-        guard let prompt = lastPrompt(session), session.project.review?.isRequest(prompt) != true else { return nil }
+        guard let prompt = lastPrompt(session), session.project.review?.isRequest(prompt) != true,
+              session.project.weekly?.isRequest(prompt) != true else { return nil }
         return Session.promptTitle(prompt) == session.title ? nil : prompt
     }
 

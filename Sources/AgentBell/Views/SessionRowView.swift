@@ -48,8 +48,11 @@ struct SessionRowView: View {
         return (worktree as NSString).lastPathComponent
     }
 
+    private var weekly: WeeklyCheckout? { session.project.weekly }
+
     /// The icon is hidden from VoiceOver, so the kind of session is said here.
     private var kindDescription: String? {
+        if let weekly { return weekly.title }
         guard review != nil else { return branch.map { "分支 \($0)" } }
         return review?.range.map { "代码审查 \($0)" } ?? "代码审查"
     }
@@ -79,13 +82,14 @@ struct SessionRowView: View {
                 Button(action: onActivate) {
                     rowContent {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            if review != nil {
+                            if let kind = review != nil ? ("text.magnifyingglass", "代码审查")
+                                : weekly != nil ? ("calendar", "周报") : nil {
                                 // A kind of session, not a state: quiet beside the lamp.
-                                Image(systemName: "text.magnifyingglass")
+                                Image(systemName: kind.0)
                                     .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                                     .padding(.trailing, -4)
-                                    .help("代码审查")
+                                    .help(kind.1)
                                     .accessibilityHidden(true)
                             }
                             Text(session.title)

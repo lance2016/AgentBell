@@ -296,17 +296,18 @@ struct MarkdownReport: View {
         return blocks
     }
 
-    /// "- x" and "* x" become bullets; numbered items keep their number. Indented
-    /// items keep their indent.
+    /// "- x" and "* x" become bullets; numbered items ("1.") and lettered ones ("a.")
+    /// keep their marker. Indented items keep their indent.
     private static func listItem(_ line: String) -> String? {
         let indent = String(repeating: "    ", count: line.prefix(while: { $0 == " " }).count / 2)
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
             return indent + "• " + trimmed.dropFirst(2)
         }
-        if let dot = trimmed.firstIndex(of: "."), dot != trimmed.startIndex,
-           trimmed[..<dot].allSatisfy(\.isNumber), trimmed[dot...].hasPrefix(". ") {
-            return indent + trimmed
+        if let dot = trimmed.firstIndex(of: "."), dot != trimmed.startIndex, trimmed[dot...].hasPrefix(". ") {
+            let marker = trimmed[..<dot]
+            let lettered = marker.count == 1 && marker.allSatisfy { $0.isASCII && $0.isLowercase }
+            if marker.allSatisfy(\.isNumber) || lettered { return indent + trimmed }
         }
         return nil
     }

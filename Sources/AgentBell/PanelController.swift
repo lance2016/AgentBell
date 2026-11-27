@@ -37,12 +37,17 @@ final class PanelController {
     var openReview: ((String) -> Void)?
     /// Opens the form for a new review, in the given repository or matching one.
     var newReview: ((String?) -> Void)?
+    /// Opens a weekly report in the weekly window.
+    var openWeekly: ((String) -> Void)?
+    /// Opens the form for a new weekly report.
+    var newWeekly: (() -> Void)?
     /// Where the panel hangs from when it opens without a click on the status item.
     var defaultAnchor: (() -> NSRect?)?
 
     let presentation: Presentation
     private let store: SessionStore
     private let reviews: ReviewStore
+    private let weekly: WeeklyStore
     private let state = PanelState()
     private let panel: NSWindow
     private let shape: PanelShapeView
@@ -54,9 +59,10 @@ final class PanelController {
 
     var isShown: Bool { panel.isVisible }
 
-    init(store: SessionStore, reviews: ReviewStore, presentation: Presentation) {
+    init(store: SessionStore, reviews: ReviewStore, weekly: WeeklyStore, presentation: Presentation) {
         self.store = store
         self.reviews = reviews
+        self.weekly = weekly
         self.presentation = presentation
         switch presentation {
         case .popover:
@@ -265,6 +271,14 @@ final class PanelController {
                 self?.newReview?($0)
                 self?.dismiss()
             },
+            openWeekly: { [weak self] in
+                self?.openWeekly?($0)
+                self?.dismiss()
+            },
+            newWeekly: { [weak self] in
+                self?.newWeekly?()
+                self?.dismiss()
+            },
             chooseClaude: { [weak self] in
                 guard let self else { return }
                 self.dismiss()
@@ -298,7 +312,7 @@ final class PanelController {
                 reveal: { [weak self] in self?.revealDirectory($0) }
             )
         )
-        let root = PanelView(store: store, reviews: reviews, state: state, actions: actions, inWindow: presentation == .window)
+        let root = PanelView(store: store, reviews: reviews, weekly: weekly, state: state, actions: actions, inWindow: presentation == .window)
         shape.install(FirstClickHostingView(rootView: root))
         return shape
     }
@@ -572,7 +586,7 @@ final class PanelController {
         if key.keyCode == 53 && (!key.modifiers.isEmpty || editor?.hasMarkedText() == true) { return false }
         let listNavigation = !inDetail && !editingText && key.modifiers.isEmpty
         let sidebar = PanelStyle.current == .sidebar && !state.searchVisible && !state.needsAttentionOnly
-            && !state.tasksVisible && !state.reviewsVisible && listNavigation
+            && !state.tasksVisible && state.reportPage == nil && listNavigation
         switch (key.keyCode, key.command, key.characters) {
         case (125, false, _) where listNavigation: state.moveSelection(by: 1, store)
         case (126, false, _) where listNavigation: state.moveSelection(by: -1, store)
@@ -585,11 +599,11 @@ final class PanelController {
         case (53, _, _) where state.addingTask: state.addingTask = false
         case (53, _, _) where state.tasksVisible && state.tasksNarrow && state.taskID != nil: state.taskID = nil
         case (53, _, _) where state.tasksVisible: state.showTasks(false)
-        case (53, _, _) where state.reviewsVisible: state.showReviews(false)
+        case (53, _, _) where state.reportPage != nil: state.showReportPage(nil)
         case (53, _, _) where state.searchVisible: state.closeSearch()
         case (53, _, _) where state.needsAttentionOnly: state.showAttention(false, store)
         case (53, _, _) where presentation == .popover: hide()
-        case (_, true, "f") where !inDetail && !state.tasksVisible && !state.reviewsVisible && key.modifiers == .command:
+        case (_, true, "f") where !inDetail && !state.tasksVisible && state.reportPage == nil && key.modifiers == .command:
             guard state.canBrowse(store) else { return false }
             state.showSearch()
         // With text focused (the search field, or selected words of the conversation),

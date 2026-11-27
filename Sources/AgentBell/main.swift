@@ -19,14 +19,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsWindowController(store: store)
         let reviews = ReviewStore(sessions: store)
         let review = ReviewWindowController(store: store, reviews: reviews, openSettings: { settings.showReview() })
-        let panel = PanelController(store: store, reviews: reviews, presentation: .popover)
-        let window = PanelController(store: store, reviews: reviews, presentation: .window)
+        let weekly = WeeklyStore(sessions: store)
+        let reports = WeeklyWindowController(store: store, weekly: weekly, openSettings: { settings.showWeekly() })
+        let panel = PanelController(store: store, reviews: reviews, weekly: weekly, presentation: .popover)
+        let window = PanelController(store: store, reviews: reviews, weekly: weekly, presentation: .window)
         panel.openSettings = { settings.show() }
         window.openSettings = { settings.show() }
-        // The panel lists the reviews; reading one, or starting one, is in the review window.
+        // The panel lists reviews and reports; reading one, or starting one, is in its window.
         for controller in [panel, window] {
             controller.openReview = { review.show(selecting: $0) }
             controller.newReview = { review.newReview(in: $0) }
+            controller.openWeekly = { reports.show(selecting: $0) }
+            controller.newWeekly = { reports.show(selecting: nil) }
+        }
+        let openBackground = { (work: BackgroundWork, id: String) in
+            switch work {
+            case .review: review.show(selecting: id)
+            case .weekly: reports.show(selecting: id)
+            }
         }
         // In the Dock and the app switcher while the window is open, as a regular app.
         window.onVisibilityChange = { shown in
@@ -40,8 +50,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         desktop.openWindow = { [weak window] in window?.show() }
         desktop.openSettings = { settings.showDesktop() }
         desktop.bubbles.onOpen = { [weak window] id in
-            if id.hasPrefix(Notifier.reviewPrefix) {
-                review.show(selecting: String(id.dropFirst(Notifier.reviewPrefix.count)))
+            if let background = BackgroundWork.parse(id) {
+                openBackground(background.work, background.id)
             } else {
                 window?.open(sessionID: id)
             }
@@ -52,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.notifier.onOpen = { [weak panel, weak window] id in
             (Entry.menuBar ? panel : window)?.open(sessionID: id)
         }
-        store.notifier.onOpenReview = { review.show(selecting: $0) }
+        store.notifier.onOpenBackground = openBackground
 
         self.settings = settings
         self.panel = panel
