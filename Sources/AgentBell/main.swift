@@ -118,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyEntries() {
         let desktopOn = Entry.desktop
         statusItem?.setVisible(Entry.menuBar || !desktopOn)
+        desktop?.applyRole(Entry.desktopRole)
         desktop?.applySize(Entry.desktopSize)
         desktop?.setVisible(desktopOn)
         desktop?.bubbles.enabled = Notifier.isOn(Notifier.Key.bubble)

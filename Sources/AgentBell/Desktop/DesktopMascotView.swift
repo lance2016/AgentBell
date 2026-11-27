@@ -7,6 +7,7 @@ import SwiftUI
 @Observable
 final class DesktopMascotState {
     var status = OverallStatus.idle
+    var role = Entry.desktopRole
     var isVisible = false
     var mirrored = false
     var size = CGFloat(Entry.defaultDesktopSize)
@@ -28,6 +29,19 @@ final class DesktopMascotState {
         case .working: celebrating ? .completed : .working
         case .waiting: .waiting
         case .failed: .failed
+        }
+    }
+}
+
+enum DesktopMascotRole: String, CaseIterable, Identifiable {
+    case terminal, nightOwl
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .terminal: "粘土小终端"
+        case .nightOwl: "夜猫子"
         }
     }
 }
@@ -83,23 +97,36 @@ enum DesktopMascotAppearance: String, CaseIterable, Identifiable {
     }
 }
 
-/// The body and open eyes share a square canvas and align at every display scale.
-struct DesktopMascotArtwork {
-    let body: NSImage
-    let leftEye: NSImage
-    let rightEye: NSImage
+enum DesktopMascotArtwork {
+    case terminal(body: NSImage, leftEye: NSImage, rightEye: NSImage)
+    case poses([DesktopMascotAppearance: NSImage])
 
-    @MainActor static let bundled: Self? = {
-        func image(_ name: String) -> NSImage? {
-            Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "DesktopMascot")
+    @MainActor static func bundled(for role: DesktopMascotRole) -> Self? {
+        bundledArtwork[role] ?? bundledArtwork[.terminal]
+    }
+
+    @MainActor static var availableRoles: [DesktopMascotRole] {
+        DesktopMascotRole.allCases.filter { bundledArtwork[$0] != nil }
+    }
+
+    @MainActor private static let bundledArtwork: [DesktopMascotRole: Self] = {
+        func image(_ name: String, directory: String = "DesktopMascot") -> NSImage? {
+            Bundle.main.url(forResource: name, withExtension: "png", subdirectory: directory)
                 .flatMap { NSImage(contentsOf: $0) }
         }
 
-        guard let body = image("Body"),
-              let leftEye = image("EyeLeft"),
-              let rightEye = image("EyeRight") else { return nil }
-
-        return Self(body: body, leftEye: leftEye, rightEye: rightEye)
+        var artwork: [DesktopMascotRole: Self] = [:]
+        if let body = image("Body"), let leftEye = image("EyeLeft"), let rightEye = image("EyeRight") {
+            artwork[.terminal] = .terminal(body: body, leftEye: leftEye, rightEye: rightEye)
+        }
+        var poses: [DesktopMascotAppearance: NSImage] = [:]
+        for appearance in DesktopMascotAppearance.allCases {
+            poses[appearance] = image(appearance.rawValue, directory: "DesktopMascot/NightOwl")
+        }
+        if poses.count == DesktopMascotAppearance.allCases.count {
+            artwork[.nightOwl] = .poses(poses)
+        }
+        return artwork
     }()
 }
 
@@ -112,7 +139,8 @@ struct DesktopMascotView: View {
     @ViewState private var blinking = false
 
     private var awake: Bool {
-        state.isVisible && !reduceMotion && state.appearance == .idle && state.watchingPointer
+        guard case .terminal = artwork else { return false }
+        return state.isVisible && !reduceMotion && state.appearance == .idle && state.watchingPointer
     }
 
     var body: some View {
@@ -164,8 +192,22 @@ struct DesktopMascotDrawing: View {
     var mirrored = false
 
     var body: some View {
+        Group {
+            switch artwork {
+            case let .terminal(body, leftEye, rightEye):
+                terminal(body: body, leftEye: leftEye, rightEye: rightEye)
+            case .poses(let poses):
+                if let pose = poses[appearance] { sprite(pose) }
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+
+    private func terminal(body: NSImage, leftEye: NSImage, rightEye: NSImage) -> some View {
         ZStack(alignment: .topLeading) {
-            sprite(artwork.body)
+            sprite(body)
             Ellipse()
                 .fill(appearance.lampGradient)
                 .overlay { Ellipse().strokeBorder(.black.opacity(0.12), lineWidth: size * 0.009) }
@@ -174,8 +216,8 @@ struct DesktopMascotDrawing: View {
                 .position(x: size * (mirrored ? 0.316 : 0.684), y: size * 0.108)
             if appearance == .idle && openEyes {
                 ZStack {
-                    sprite(artwork.leftEye)
-                    sprite(artwork.rightEye)
+                    sprite(leftEye)
+                    sprite(rightEye)
                 }
                 .offset(gaze)
                 .animation(.easeOut(duration: 0.15), value: gaze)
@@ -184,9 +226,6 @@ struct DesktopMascotDrawing: View {
                     .position(x: size * (mirrored ? 0.403 : 0.597), y: size * 0.608)
             }
         }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
-        .allowsHitTesting(false)
     }
 
     private func sprite(_ image: NSImage) -> some View {

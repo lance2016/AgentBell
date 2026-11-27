@@ -7,6 +7,8 @@ enum Entry {
     static let menuBarKey = "entry.menuBar"
     static let desktopKey = "entry.desktop"
     static let desktopSizeKey = "entry.desktopSize"
+    static let desktopRoleKey = "entry.desktopRole"
+    static let defaultDesktopRole = DesktopMascotRole.terminal
     static let desktopSizeRange = 64...128
     static let defaultDesktopSize = 88
 
@@ -16,6 +18,11 @@ enum Entry {
 
     static var desktopSize: Int {
         desktopSize(UserDefaults.standard.object(forKey: desktopSizeKey) as? Int ?? defaultDesktopSize)
+    }
+
+    static var desktopRole: DesktopMascotRole {
+        UserDefaults.standard.string(forKey: desktopRoleKey)
+            .flatMap(DesktopMascotRole.init(rawValue:)) ?? defaultDesktopRole
     }
 
     static var menuBar: Bool { UserDefaults.standard.object(forKey: menuBarKey) as? Bool ?? true }
@@ -132,6 +139,10 @@ final class DesktopIconController: NSObject {
 
     func applyNotices(_ changes: Notices.Changes) {
         bubbles.apply(changes)
+    }
+
+    func applyRole(_ role: DesktopMascotRole) {
+        mascot.role = role
     }
 
     private func startCelebration() {
@@ -513,7 +524,7 @@ private struct DesktopIconView: View {
     private var size: CGFloat { state.size }
 
     var body: some View {
-        if let artwork = DesktopMascotArtwork.bundled {
+        if let artwork = DesktopMascotArtwork.bundled(for: state.role) {
             DesktopMascotView(state: state, artwork: artwork, size: size)
         } else {
             fallbackIcon
