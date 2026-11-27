@@ -15,21 +15,9 @@ enum ReleaseNotes {
     }
 
     static let items = [
-        Item(symbol: "rectangle.grid.1x2",
-             title: "详情一页看全",
-             detail: "概览里有最近一轮、所在的开发任务、工作区和会话信息，不用再点开菜单才知道它在哪个任务里。"),
-        Item(symbol: "arrow.triangle.branch",
-             title: "认得出 worktree",
-             detail: "会话在 worktree 里工作时，详情的工作区会标出来，连同分支、改动文件数和最近提交。"),
-        Item(symbol: "circle.lefthalf.filled",
-             title: "更安静的详情",
-             detail: "按钮收成三个，不再用强调色；回复不再重复出现，页面上有颜色的只剩状态灯。"),
-        Item(symbol: "clock.arrow.circlepath",
-             title: "更新记录",
-             detail: "这一页底部可以打开全部版本的更新记录。"),
-        Item(symbol: "wrench.and.screwdriver",
-             title: "细节修正",
-             detail: "用 Xcode 16.1 也能编译；请求通知权限更稳。"),
+        Item(symbol: "arrow.down.circle",
+             title: "应用内更新",
+             detail: "「设置 › 关于」发现新版本后，点「下载并安装」，下好后点「重启完成更新」。安装包带签名，校验不过不会安装；终端控制和辅助功能的授权不用重给。"),
     ]
 }
 

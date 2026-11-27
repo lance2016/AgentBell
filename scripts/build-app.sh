@@ -24,7 +24,7 @@ done
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="$ROOT/build/AgentBell.app"
 BUNDLE_ID="com.agentbell.AgentBell"
-VERSION="1.2.0"
+VERSION="1.2.1"
 
 cd "$ROOT"
 

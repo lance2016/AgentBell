@@ -47,7 +47,7 @@ scripts/build-app.sh --install
 
 ## 数据留在本机
 
-AgentBell 在本机读取会话列表、对话记录和 Git 状态，hook 事件通过本机 Unix socket 传递。应用只在启动或手动检查更新时请求 GitHub 的公开发布信息。
+AgentBell 在本机读取会话列表、对话记录和 Git 状态，hook 事件通过本机 Unix socket 传递。应用只在启动或手动检查更新时请求 GitHub 的公开发布信息，点「下载并安装」时才下载新版本。
 
 <details>
 <summary>安装、连接与卸载细节</summary>

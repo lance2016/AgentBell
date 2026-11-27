@@ -528,11 +528,41 @@ struct AboutSettings: View {
             case .failed:
                 Text("检查失败").foregroundStyle(.secondary)
             case .available(let release):
-                Button("下载 \(release.version)") { NSWorkspace.shared.open(release.page) }
+                if release.archive != nil {
+                    Button("下载并安装 \(release.version)") { Task { await updates.install(release) } }
+                        .buttonStyle(.borderedProminent)
+                } else {
+                    Button("下载 \(release.version)") { NSWorkspace.shared.open(release.page) }
+                        .buttonStyle(.link)
+                }
+            case .downloading(_, let progress):
+                if let progress {
+                    ProgressView(value: progress).frame(width: 80)
+                    Text("正在下载 \(Int(progress * 100))%").foregroundStyle(.secondary).monospacedDigit()
+                } else {
+                    ProgressView().controlSize(.small)
+                    Text("正在下载…").foregroundStyle(.secondary)
+                }
+            case .ready(let release):
+                Text("\(release.version) 已下载").foregroundStyle(.secondary)
+                Button("重启完成更新") { updates.restart() }
+                    .buttonStyle(.borderedProminent)
+            case .installFailed(let release, let message):
+                Text(message).foregroundStyle(.secondary)
+                Button("去下载页") { NSWorkspace.shared.open(release.page) }
                     .buttonStyle(.link)
             }
-            Button("检查更新") { Task { await updates.check() } }
-                .disabled(updates.state == .checking)
+            if showsCheckButton {
+                Button("检查更新") { Task { await updates.check() } }
+                    .disabled(updates.state == .checking)
+            }
+        }
+    }
+
+    private var showsCheckButton: Bool {
+        switch updates.state {
+        case .downloading, .ready: false
+        default: true
         }
     }
 }
