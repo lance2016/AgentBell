@@ -74,6 +74,10 @@ final class DesktopIconController: NSObject {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
+        // Left unset, the window server decides per pixel and lets clicks through wherever
+        // it sees transparency. On macOS 26 it sees almost none of the SwiftUI drawing, so
+        // the mascot took the pointer only in a small patch. The whole square is the icon.
+        panel.ignoresMouseEvents = false
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         bubbles = BubbleController(icon: panel)
