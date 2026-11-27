@@ -93,10 +93,14 @@ final class Notifier: NSObject {
 
     /// Shows the system's own prompt. Asked only once the user connected the hooks.
     func requestPermission() async {
-        do {
-            _ = try await center.requestAuthorization(options: [.alert, .sound])
-        } catch {
-            log.error("notification authorization failed: \(String(describing: error), privacy: .public)")
+        // The completion form: the async one sends the center across actors.
+        let failure: (any Error)? = await withCheckedContinuation { continuation in
+            center.requestAuthorization(options: [.alert, .sound]) { _, error in
+                continuation.resume(returning: error)
+            }
+        }
+        if let failure {
+            log.error("notification authorization failed: \(String(describing: failure), privacy: .public)")
         }
         await refresh()
     }
