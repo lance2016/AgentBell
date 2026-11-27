@@ -90,9 +90,10 @@ public struct Session: Sendable, Equatable, Identifiable, Codable {
     /// short hex suffix, like "ai-pet-7f". That says nothing the group name doesn't.
     /// `title` also tries the project's folder: a session that moved into one of its
     /// worktrees keeps the name of where it started.
+    /// Claude Code lowercases the folder's name.
     static func isGeneratedName(_ name: String, cwd: String) -> Bool {
         let folder = (cwd as NSString).lastPathComponent
-        guard name.hasPrefix(folder + "-") else { return false }
+        guard name.lowercased().hasPrefix(folder.lowercased() + "-") else { return false }
         let suffix = name.dropFirst(folder.count + 1)
         return (2...8).contains(suffix.count) && suffix.allSatisfy(\.isHexDigit)
     }

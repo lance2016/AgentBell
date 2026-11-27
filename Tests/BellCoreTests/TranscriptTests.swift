@@ -126,6 +126,9 @@ struct SessionTitleTests {
         #expect(Session.isGeneratedName("ai-pet-7f", cwd: "/w/ai-pet"))
         #expect(!Session.isGeneratedName("修复提醒", cwd: "/w/ai-pet"))
         #expect(!Session.isGeneratedName("ai-pet-refactor", cwd: "/w/ai-pet"))
+        // Claude Code lowercases the folder: a report's folder is an upper-case UUID.
+        #expect(Session.isGeneratedName("29f7bd0d-db41-40af-9c09-fbc5932f835c-05",
+                                        cwd: "/w/周报/29F7BD0D-DB41-40AF-9C09-FBC5932F835C"))
     }
 
     /// Claude Code names a session after the folder it started in. Moved into one of the
