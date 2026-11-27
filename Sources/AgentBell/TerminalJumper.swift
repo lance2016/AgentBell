@@ -163,7 +163,7 @@ enum TerminalJumper {
         TerminalHighlight.flash(pid: app.processIdentifier)
     }
 
-    private static func isRegularApp(_ pid: Int32) -> Bool {
+    nonisolated private static func isRegularApp(_ pid: Int32) -> Bool {
         NSRunningApplication(processIdentifier: pid)?.activationPolicy == .regular
     }
 

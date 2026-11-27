@@ -102,13 +102,18 @@ final class Notifier: NSObject {
     }
 
     func refresh() async {
-        let settings = await center.notificationSettings()
-        switch settings.authorizationStatus {
+        // The settings object is not Sendable; only the two values cross over.
+        let (status, previews) = await withCheckedContinuation { continuation in
+            center.getNotificationSettings { settings in
+                continuation.resume(returning: (settings.authorizationStatus, settings.showPreviewsSetting))
+            }
+        }
+        switch status {
         case .notDetermined: permission = .notAsked
         case .denied: permission = .denied
         default: permission = .allowed
         }
-        previewsHidden = settings.showPreviewsSetting == .never
+        previewsHidden = previews == .never
     }
 
     /// Every switch defaults to on.

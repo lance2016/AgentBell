@@ -23,7 +23,7 @@ final class GlobalHotKeys {
     @ObservationIgnored private var paused = false
     @ObservationIgnored private let log = Logger(subsystem: "com.agentbell.AgentBell", category: "shortcuts")
 
-    private static let signature: OSType = 0x4167_426C // "AgBl"
+    nonisolated private static let signature: OSType = 0x4167_426C // "AgBl"
 
     static func key(for shortcut: Shortcut) -> HotKey? {
         HotKey.stored(UserDefaults.standard.data(forKey: shortcut.defaultsKey), default: shortcut.defaultKey)

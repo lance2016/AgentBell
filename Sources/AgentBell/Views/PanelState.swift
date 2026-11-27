@@ -166,8 +166,8 @@ final class PanelState {
     func selectableSessions(_ store: SessionStore) -> [Session] {
         if tasksVisible { return [] }
         if searchVisible {
-            return PanelLayout.groups(store.liveSessions.filter(matches), pinned: store.pinnedProjects).flatMap(\.sessions)
-                + store.tracker.recent.filter(matches)
+            return PanelLayout.groups(store.liveSessions.filter { matches($0) }, pinned: store.pinnedProjects).flatMap(\.sessions)
+                + store.tracker.recent.filter { matches($0) }
         }
         if needsAttentionOnly { return attentionSessions(store) }
         switch PanelStyle.current {

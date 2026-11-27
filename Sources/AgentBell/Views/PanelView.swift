@@ -500,8 +500,8 @@ struct PanelView: View {
     }
 
     private func listContent(now: Date) -> some View {
-        let groups = PanelLayout.groups(store.liveSessions.filter(state.matches), pinned: store.pinnedProjects)
-        let recent = store.tracker.recent.filter(state.matches)
+        let groups = PanelLayout.groups(store.liveSessions.filter { state.matches($0) }, pinned: store.pinnedProjects)
+        let recent = store.tracker.recent.filter { state.matches($0) }
         return VStack(spacing: 10) {
             if groups.isEmpty && recent.isEmpty {
                 emptySessions

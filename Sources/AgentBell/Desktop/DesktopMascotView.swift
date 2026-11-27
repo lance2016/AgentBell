@@ -88,7 +88,7 @@ struct DesktopMascotArtwork {
     let leftEye: NSImage
     let rightEye: NSImage
 
-    static let bundled: Self? = {
+    @MainActor static let bundled: Self? = {
         func image(_ name: String) -> NSImage? {
             Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "DesktopMascot")
                 .flatMap { NSImage(contentsOf: $0) }

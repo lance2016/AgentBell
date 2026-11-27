@@ -51,20 +51,25 @@ struct ShortcutRow: View {
         recording = true
         hotKeys.setPaused(true)
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            switch Int(event.keyCode) {
-            case kVK_Escape:
-                stop()
-            case kVK_Delete, kVK_ForwardDelete:
-                GlobalHotKeys.set(nil, for: shortcut)
-                stop()
-            default:
-                let key = HotKey(event: event)
-                // Needs ⌘, ⌥ or ⌃; anything else keeps listening.
-                guard key.isUsable else { return nil }
-                GlobalHotKeys.set(key, for: shortcut)
-                stop()
-            }
+            // NSEvent is not Sendable; hand only plain values to the main actor.
+            let key = HotKey(event: event)
+            MainActor.assumeIsolated { record(key) }
             return nil
+        }
+    }
+
+    private func record(_ key: HotKey) {
+        switch Int(key.keyCode) {
+        case kVK_Escape:
+            stop()
+        case kVK_Delete, kVK_ForwardDelete:
+            GlobalHotKeys.set(nil, for: shortcut)
+            stop()
+        default:
+            // Needs ⌘, ⌥ or ⌃; anything else keeps listening.
+            guard key.isUsable else { return }
+            GlobalHotKeys.set(key, for: shortcut)
+            stop()
         }
     }
 
