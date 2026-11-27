@@ -15,15 +15,12 @@ enum ReleaseNotes {
     }
 
     static let items = [
+        Item(symbol: "moon.stars",
+             title: "桌面角色可以换",
+             detail: "在「设置 › 桌面」的「桌面角色」里选「夜猫子」，桌面上的小终端就换成一只猫头鹰，每种状态一个姿势。"),
         Item(symbol: "calendar",
-             title: "周报",
-             detail: "侧栏「周报」里选本周或上周、勾选项目，AgentBell 整理这段时间的会话，交给 Claude 按模板写成周报。"),
-        Item(symbol: "pencil",
-             title: "周报能直接改",
-             detail: "在周报窗口切到「编辑」就能改，边改边保存；也能「在终端继续」让 Claude 改。"),
-        Item(symbol: "arrow.up.left.and.arrow.down.right",
-             title: "跳转后铺满屏幕",
-             detail: "在「设置 › 通用」打开后，跳回或新建会话时，终端窗口没铺满就铺满当前屏幕。"),
+             title: "周报会话标题",
+             detail: "在终端继续的周报会话，标题又能正常显示成「周报 日期范围」。"),
     ]
 }
 
